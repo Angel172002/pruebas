@@ -1,0 +1,25 @@
+# Blueprint de Render. SQLite necesita disco persistente (plan de pago); sin disco la base se pierde en cada deploy.
+services:
+  - type: web
+    name: gestor-directivo-liva
+    runtime: docker
+    plan: starter
+    healthCheckPath: /readyz
+    autoDeploy: true
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: OWNER_TOKEN
+        sync: false
+      - key: EDITOR_TOKEN
+        sync: false
+      - key: VIEWER_TOKEN
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_REPOS
+        value: Angel172002/pruebas

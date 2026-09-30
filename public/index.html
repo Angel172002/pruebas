@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gestor Directivo – LIVA</title>
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141A21'/%3E%3Cpath d='M9 17l5 5 9-11' stroke='%23fff' stroke-width='3' fill='none'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script src="theme.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Saltar al contenido</a>
+
+<section id="login" class="login" hidden>
+  <form id="loginForm" class="login-card">
+    <h1>Gestor Directivo – LIVA</h1>
+    <label for="lClave">Clave de acceso</label>
+    <input id="lClave" type="password" autocomplete="current-password" required>
+    <p class="err" id="lErr" role="alert"></p>
+    <button class="btn primary" type="submit">Entrar</button>
+  </form>
+</section>
+
+<div class="wrap" id="app" hidden>
+  <header class="top">
+    <div>
+      <h1>Gestor Directivo – LIVA</h1>
+      <p class="hoy" id="hoy"></p>
+    </div>
+    <div class="controls">
+      <input id="fBuscar" type="search" placeholder="Buscar…" aria-label="Buscar por título, notas, origen o responsable">
+      <select id="fDir" aria-label="Filtrar por dirección"></select>
+      <select id="fEstado" aria-label="Filtrar por estado">
+        <option value="abiertas">Abiertas</option>
+        <option value="vencidas">Vencidas</option>
+        <option value="semana">Vencen en 7 días</option>
+        <option value="cerradas">Cerradas</option>
+        <option value="todas">Todas</option>
+      </select>
+      <button class="btn quiet" id="bTema" type="button" aria-label="Cambiar tema claro/oscuro">Tema</button>
+      <button class="btn quiet" id="bSalir" type="button" hidden>Salir</button>
+    </div>
+  </header>
+
+  <div id="aviso" class="aviso" role="alert" hidden></div>
+
+  <nav class="tabs" role="tablist" aria-label="Secciones">
+    <button class="tab" role="tab" id="tab-actividades" aria-controls="pan-actividades" data-tab="actividades">Actividades <span class="n" id="nAct">0</span></button>
+    <button class="tab" role="tab" id="tab-pagos" aria-controls="pan-pagos" data-tab="pagos" hidden>Pagos <span class="n" id="nPag">0</span></button>
+    <button class="tab" role="tab" id="tab-confirmar" aria-controls="pan-confirmar" data-tab="confirmar" hidden>Por confirmar <span class="n alerta" id="nConf">0</span></button>
+    <button class="tab" role="tab" id="tab-datos" aria-controls="pan-datos" data-tab="datos" hidden>Datos y GitHub</button>
+  </nav>
+
+  <main id="main">
+    <section id="pan-actividades" role="tabpanel" aria-labelledby="tab-actividades" tabindex="0">
+      <div class="bar"><ul class="resumen" id="resAct"></ul>
+        <div class="bar-btns"><button class="btn" id="bResumen" type="button">Copiar resumen de la semana</button>
+        <button class="btn primary" data-act="new" data-tipo="actividad" data-escribe type="button">Nueva actividad</button></div></div>
+      <div class="board" id="board"></div>
+    </section>
+    <section id="pan-pagos" role="tabpanel" aria-labelledby="tab-pagos" tabindex="0" hidden>
+      <div class="bar"><ul class="resumen" id="resPag"></ul>
+        <div class="bar-btns"><a class="btn" href="/api/export.csv?tipo=pago" download>Exportar CSV</a>
+        <button class="btn primary" data-act="new" data-tipo="pago" data-escribe type="button">Nuevo pago</button></div></div>
+      <div class="board" id="boardPag"></div>
+    </section>
+    <section id="pan-confirmar" role="tabpanel" aria-labelledby="tab-confirmar" tabindex="0" hidden><div id="inbox"></div></section>
+    <section id="pan-datos" role="tabpanel" aria-labelledby="tab-datos" tabindex="0" hidden><div id="datos"></div></section>
+  </main>
+</div>
+
+<dialog id="dlg" aria-labelledby="dlgTitle" aria-modal="true">
+  <form class="dlg" id="dlgForm" novalidate>
+    <h2 id="dlgTitle">Nueva actividad</h2>
+    <div class="field"><label for="iTitulo" id="lTitulo">Qué hay que hacer</label><input id="iTitulo" maxlength="160" autocomplete="off" required></div>
+    <div class="field" role="group" aria-labelledby="lCat">
+      <span class="lbl" id="lCat">Categoría</span>
+      <div class="seg" id="iCat">
+        <button type="button" data-v="urgente">Urgente</button><button type="button" data-v="prioritario">Prioritario</button><button type="button" data-v="importante">Importante</button>
+      </div>
+      <p class="hint" id="catHint"></p>
+    </div>
+    <div class="row">
+      <div class="field"><label for="iDir">Dirección</label><select id="iDir"></select></div>
+      <div class="field"><label for="iFecha" id="lFecha">Fecha límite</label><input id="iFecha" type="date"></div>
+    </div>
+    <div class="row" id="wPago">
+      <div class="field"><label for="iMonto">Valor (COP, sin decimales)</label><input id="iMonto" inputmode="numeric" placeholder="$ 0" autocomplete="off"></div>
+      <div class="field"><label for="iRec">Se repite</label><select id="iRec"><option value="no">No, pago único</option><option value="mensual">Cada mes</option></select></div>
+    </div>
+    <div class="row">
+      <div class="field"><label for="iResp">Responsable</label><input id="iResp" maxlength="80" autocomplete="off"></div>
+      <div class="field"><label for="iOrigen">Origen</label><input id="iOrigen" maxlength="80" placeholder="Ej.: comité, daily, WhatsApp" autocomplete="off"></div>
+    </div>
+    <div class="field"><label for="iNotas">Notas</label><textarea id="iNotas" maxlength="1000"></textarea></div>
+    <div id="wGit" class="git" hidden></div>
+    <details id="wHist" class="hist" hidden><summary>Historial</summary><ol id="hist"></ol></details>
+    <p class="err" id="dlgErr" role="alert"></p>
+    <div class="dlg-f">
+      <div><button class="btn danger" id="bEliminar" type="button" hidden>Eliminar</button>
+           <button class="btn quiet" id="bDescartar" type="button" hidden>Descartar</button></div>
+      <div><button class="btn" id="bCancelar" type="button">Cerrar</button>
+           <button class="btn primary" id="bGuardar" type="submit">Guardar</button></div>
+    </div>
+  </form>
+</dialog>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
