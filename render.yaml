@@ -9,11 +9,9 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
+      - key: ADMIN_EMAIL
+        sync: false
       - key: OWNER_TOKEN
-        sync: false
-      - key: EDITOR_TOKEN
-        sync: false
-      - key: VIEWER_TOKEN
         sync: false
       - key: SESSION_SECRET
         generateValue: true

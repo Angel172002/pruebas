@@ -2,11 +2,14 @@
 import { loadConfig } from '../src/config.js';
 import { openDb } from '../src/db.js';
 import { crearApp } from '../src/app.js';
+import { sembrarAdmin } from '../src/users.js';
 
 let app;
 async function iniciar() {
   const cfg = loadConfig();
-  return crearApp({ cfg, db: await openDb({ url: cfg.dbUrl }) });
+  const db = await openDb({ url: cfg.dbUrl });
+  await sembrarAdmin(db, cfg);
+  return crearApp({ cfg, db });
 }
 let cargando;
 export default async function handler(req, res) {

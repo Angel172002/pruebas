@@ -12,14 +12,35 @@
 <body>
 <a class="skip" href="#main">Saltar al contenido</a>
 
-<section id="login" class="login" hidden>
-  <form id="loginForm" class="login-card">
-    <h1>Gestor Directivo – LIVA</h1>
-    <label for="lClave">Clave de acceso</label>
-    <input id="lClave" type="password" autocomplete="current-password" required>
-    <p class="err" id="lErr" role="alert"></p>
-    <button class="btn primary" type="submit">Entrar</button>
-  </form>
+<section id="login" class="auth" hidden>
+  <div class="auth-hero" aria-hidden="true">
+    <div class="auth-brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span><span>LIVA</span></div>
+    <h2>Cada dirección,<br>su propio panel.</h2>
+    <p>Actividades, pagos y seguimiento en un solo lugar, con lo urgente siempre primero.</p>
+    <ul class="auth-pills"><li class="p-urg">Urgente</li><li class="p-pri">Prioritario</li><li class="p-imp">Importante</li></ul>
+  </div>
+  <div class="auth-panel">
+    <form id="loginForm" class="auth-card" novalidate>
+      <h1>Bienvenido</h1>
+      <p class="auth-sub">Ingresa con tu correo y tu clave para ver tu panel.</p>
+      <div class="field"><label for="lCorreo">Correo</label><input id="lCorreo" type="email" autocomplete="username" inputmode="email" required></div>
+      <div class="field"><label for="lClave">Clave</label>
+        <div class="pass"><input id="lClave" type="password" autocomplete="current-password" required>
+        <button type="button" id="lVer" class="pass-btn" aria-pressed="false" aria-label="Mostrar la clave">Ver</button></div></div>
+      <p class="err" id="lErr" role="alert"></p>
+      <button class="btn primary big" id="lEntrar" type="submit">Entrar</button>
+      <p class="auth-foot">¿Olvidaste tu clave? Pídele al administrador que la restablezca.</p>
+    </form>
+  </div>
+</section>
+
+<section id="forzar" class="auth" hidden>
+  <div class="auth-hero" aria-hidden="true">
+    <div class="auth-brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span><span>LIVA</span></div>
+    <h2>Un último paso<br>para proteger tu cuenta.</h2>
+    <p>Crea tu propia clave. La temporal que recibiste dejará de servir.</p>
+  </div>
+  <div class="auth-panel"><div class="auth-card" id="forzarCuerpo"></div></div>
 </section>
 
 <div class="wrap" id="app" hidden>
@@ -39,7 +60,9 @@
         <option value="todas">Todas</option>
       </select>
       <button class="btn quiet" id="bTema" type="button" aria-label="Cambiar tema claro/oscuro">Tema</button>
-      <button class="btn quiet" id="bSalir" type="button" hidden>Salir</button>
+      <span class="quien" id="quien"></span>
+      <button class="btn quiet" id="bCuenta" type="button">Mi clave</button>
+      <button class="btn quiet" id="bSalir" type="button">Salir</button>
     </div>
   </header>
 
@@ -49,6 +72,7 @@
     <button class="tab" role="tab" id="tab-actividades" aria-controls="pan-actividades" data-tab="actividades">Actividades <span class="n" id="nAct">0</span></button>
     <button class="tab" role="tab" id="tab-pagos" aria-controls="pan-pagos" data-tab="pagos" hidden>Pagos <span class="n" id="nPag">0</span></button>
     <button class="tab" role="tab" id="tab-confirmar" aria-controls="pan-confirmar" data-tab="confirmar" hidden>Por confirmar <span class="n alerta" id="nConf">0</span></button>
+    <button class="tab" role="tab" id="tab-usuarios" aria-controls="pan-usuarios" data-tab="usuarios" hidden>Usuarios</button>
     <button class="tab" role="tab" id="tab-datos" aria-controls="pan-datos" data-tab="datos" hidden>Datos y GitHub</button>
   </nav>
 
@@ -66,6 +90,11 @@
       <div class="board" id="boardPag"></div>
     </section>
     <section id="pan-confirmar" role="tabpanel" aria-labelledby="tab-confirmar" tabindex="0" hidden><div id="inbox"></div></section>
+    <section id="pan-usuarios" role="tabpanel" aria-labelledby="tab-usuarios" tabindex="0" hidden>
+      <div class="bar"><p class="hint">Cada persona entra con su correo y ve solo el panel de su dirección. Los administradores ven todo.</p>
+        <button class="btn primary" id="bNuevoUsuario" type="button">Nuevo usuario</button></div>
+      <div id="usuarios"></div>
+    </section>
     <section id="pan-datos" role="tabpanel" aria-labelledby="tab-datos" tabindex="0" hidden><div id="datos"></div></section>
   </main>
 </div>
@@ -105,6 +134,8 @@
     </div>
   </form>
 </dialog>
+
+<dialog id="dlgGen" aria-labelledby="genTitulo" aria-modal="true"><div class="dlg"><h2 id="genTitulo"></h2><div id="genCuerpo"></div></div></dialog>
 
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <script type="module" src="app.js"></script>

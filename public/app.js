@@ -9,8 +9,9 @@ const ORDEN = ['urgente', 'prioritario', 'importante'];
 const TODOS = 'Todos', GENERAL = 'Dirección General';
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 const $ = s => document.querySelector(s);
+const ROLES = { admin: 'Administrador', miembro: 'Miembro', lector: 'Lector' };
 
-const S = { rol: null, cfg: null, tasks: [], props: [], resumen: null, cargado: false, error: '',
+const S = { rol: null, user: null, users: [], cfg: null, tasks: [], props: [], resumen: null, cargado: false, error: '',
   ui: { tab: 'actividades', dir: 'todas', estado: 'abiertas', q: '' }, abiertas: new Set() };
 try { S.ui.dir = localStorage.getItem('liva-dir') || 'todas'; } catch {}
 
@@ -50,7 +51,8 @@ function toast(msg, deshacer) {
   cont.append(t); while (cont.children.length > 4) cont.firstChild.remove(); arm();
 }
 function fallo(e) {
-  if (e instanceof ApiError && e.status === 401) { S.rol = null; return mostrar(); }
+  if (e instanceof ApiError && e.status === 401) return sinSesion();
+  if (e instanceof ApiError && e.code === 'must_change') return arrancar();
   toast(e.message || 'No se pudo completar la acción.');
 }
 
@@ -59,27 +61,31 @@ async function cargar() {
   try {
     const [t, r] = await Promise.all([api.get('/tasks'), api.get('/summary')]);
     S.tasks = t.tasks; S.resumen = r;
-    S.props = S.rol === 'owner' ? (await api.get('/proposals')).tasks : [];
+    S.props = S.rol === 'admin' ? (await api.get('/proposals')).tasks : [];
+    S.users = S.rol === 'admin' ? (await api.get('/users')).users : [];
     S.error = ''; S.cargado = true;
   } catch (e) {
-    if (e.status === 401) { S.rol = null; return mostrar(); }
+    if (e.status === 401) return sinSesion();
+    if (e.code === 'must_change') return arrancar();
     S.error = 'No se pudo actualizar desde el servidor. Mostrando los últimos datos.'; S.cargado = true;
   }
   render();
 }
 async function arrancar() {
   try {
-    const s = await api.get('/session');
-    S.cfg = s; S.rol = s.rol;
-    if (S.rol) poblarSelects();
+    const r = await api.get('/session');
+    S.cfg = r; S.user = r.user; S.rol = r.user?.rol || null;
+    if (S.user && !S.user.must_change) poblarSelects();
   } catch { S.error = 'No hay conexión con el servidor.'; }
   mostrar();
-  if (S.rol) { render(); await cargar(); }
+  if (S.user && !S.user.must_change) { render(); await cargar(); }
 }
+function sinSesion() { S.user = null; S.rol = null; S.tasks = []; S.props = []; S.users = []; mostrar(); }
 function mostrar() {
-  $('#login').hidden = Boolean(S.rol); $('#app').hidden = !S.rol;
-  $('#bSalir').hidden = !S.rol || false;
-  if (!S.rol) $('#lClave').focus();
+  const u = S.user, forzar = Boolean(u?.must_change);
+  $('#login').hidden = Boolean(u); $('#forzar').hidden = !forzar; $('#app').hidden = !u || forzar;
+  if (!u) { $('#lErr').textContent = S.error && !S.cfg ? S.error : ''; $('#lCorreo').focus(); }
+  if (forzar) { $('#forzarCuerpo').replaceChildren(h('h1', { text: 'Crea tu clave' }), h('p', { class: 'auth-sub', text: `Hola, ${u.nombre}. Por seguridad debes cambiar la clave temporal antes de entrar.` }), formClave({ forzado: true, alOk: arrancar })); }
 }
 
 /* ---------- filtros ---------- */
@@ -98,26 +104,28 @@ function pasaEstado(t) {
   return true;
 }
 const visibles = tipo => S.tasks.filter(t => t.tipo === tipo && pasaDir(t) && pasaBusqueda(t) && pasaEstado(t));
-const esEscritor = () => S.rol === 'owner' || S.rol === 'editor';
+const esEscritor = () => S.rol === 'admin' || S.rol === 'miembro';
+/** Un miembro solo modifica actividades de su dirección; lo de "Todos" es del administrador. */
+const puedeEditar = t => S.rol === 'admin' || (S.rol === 'miembro' && t.tipo === 'actividad' && t.area === S.user.area && t.estado !== 'propuesta');
 
 /* ---------- render ---------- */
 function render() {
   if (!S.rol) return;
   const foco = document.activeElement?.dataset?.id && { id: document.activeElement.dataset.id, act: document.activeElement.dataset.act };
   $('#hoy').textContent = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Bogota' }).replace(/^./, c => c.toUpperCase());
-  const owner = S.rol === 'owner';
-  for (const id of ['pagos', 'confirmar', 'datos']) $('#tab-' + id).hidden = !owner;
+  const owner = S.rol === 'admin';
+  $('#quien').textContent = owner ? (S.user.nombre === ROLES.admin ? S.user.nombre : `${S.user.nombre} · ${ROLES.admin}`) : `${S.user.nombre} · ${S.user.area.replace(/^Dirección /, '')}`;
+  for (const id of ['pagos', 'confirmar', 'usuarios', 'datos']) $('#tab-' + id).hidden = !owner;
   if (!owner && S.ui.tab !== 'actividades') S.ui.tab = 'actividades';
   document.querySelectorAll('.tab').forEach(t => { const sel = t.dataset.tab === S.ui.tab; t.setAttribute('aria-selected', String(sel)); t.tabIndex = sel ? 0 : -1; });
-  for (const id of ['actividades', 'pagos', 'confirmar', 'datos']) $('#pan-' + id).hidden = S.ui.tab !== id;
+  for (const id of ['actividades', 'pagos', 'confirmar', 'usuarios', 'datos']) $('#pan-' + id).hidden = S.ui.tab !== id;
   $('#nAct').textContent = S.tasks.filter(t => t.tipo === 'actividad' && t.estado === 'pendiente' && pasaDir(t)).length;
   $('#nPag').textContent = S.tasks.filter(t => t.tipo === 'pago' && t.estado === 'pendiente' && pasaDir(t)).length;
   const nc = S.props.filter(t => t.estado === 'propuesta').length;
   $('#nConf').textContent = nc; $('#nConf').classList.toggle('hay', nc > 0);
   document.querySelectorAll('[data-escribe]').forEach(b => { b.hidden = !esEscritor() || (b.dataset.tipo === 'pago' && !owner); });
   const av = $('#aviso'); av.hidden = !S.error; av.replaceChildren(h('span', { text: S.error }), h('button', { class: 'btn sm', type: 'button', text: 'Reintentar', onclick: cargar }));
-  $('#bSalir').hidden = false;
-  if (S.ui.tab === 'actividades') renderAct(); else if (S.ui.tab === 'pagos') renderPag(); else if (S.ui.tab === 'confirmar') renderConf(); else renderDatos();
+  if (S.ui.tab === 'actividades') renderAct(); else if (S.ui.tab === 'pagos') renderPag(); else if (S.ui.tab === 'confirmar') renderConf(); else if (S.ui.tab === 'usuarios') renderUsuarios(); else renderDatos();
   if (foco) document.querySelector(`[data-id="${CSS.escape(foco.id)}"][data-act="${CSS.escape(foco.act)}"]`)?.focus();
 }
 
@@ -161,7 +169,7 @@ function tablero(tipo) {
         h('div', {}, h('h2', { class: 'cat', id: `h-${tipo}-${cat}` }, c.nombre, h('span', { class: 'n', text: abiertas.length })),
           h('p', { class: 'regla', text: c.regla }),
           pago ? h('p', { class: 'col-total', text: pesos(abiertas.reduce((s, t) => s + (t.monto || 0), 0)) }) : h('p', { class: 'help', text: c.ayuda })),
-        esEscritor() && (!pago || S.rol === 'owner') ? h('button', { class: 'add', type: 'button', 'data-act': 'new', 'data-tipo': tipo, 'data-cat': cat, 'aria-label': `Añadir ${pago ? 'pago' : 'actividad'} a ${c.nombre}`, text: '+' }) : null),
+        esEscritor() && (!pago || S.rol === 'admin') ? h('button', { class: 'add', type: 'button', 'data-act': 'new', 'data-tipo': tipo, 'data-cat': cat, 'aria-label': `Añadir ${pago ? 'pago' : 'actividad'} a ${c.nombre}`, text: '+' }) : null),
       h('div', { class: 'col-b' }, cuerpo));
   });
 }
@@ -171,7 +179,7 @@ function tarjeta(t) {
   const fCls = t.dias === null ? '' : t.dias < 0 ? 'tarde' : t.dias <= 2 ? 'pronto' : '';
   const accion = pago ? (cerrada ? 'Marcar como pendiente' : 'Marcar como pagado') : (cerrada ? 'Reabrir' : 'Marcar como hecha');
   return h('article', { class: `card ${cerrada ? 'hecha' : ''} ${t.escalada ? 'escalada' : ''}` },
-    h('button', { class: 'check', type: 'button', 'data-act': 'toggle', 'data-id': t.id, disabled: !esEscritor(), 'aria-label': `${accion}: ${t.titulo}` },
+    h('button', { class: 'check', type: 'button', 'data-act': 'toggle', 'data-id': t.id, disabled: !puedeEditar(t), 'aria-label': `${accion}: ${t.titulo}` },
       svgCheck()),
     h('div', {},
       h('h3', {}, h('button', { type: 'button', 'data-act': 'edit', 'data-id': t.id, text: t.titulo })),
@@ -302,19 +310,20 @@ function desarmar() { D.armado = false; const b = $('#bEliminar'); b.textContent
 function abrir(tipo, id, cat) {
   const t = id ? (S.tasks.find(x => x.id === id) || S.props.find(x => x.id === id)) : null;
   D.tipo = t ? t.tipo : tipo; D.id = t?.id || null; D.cat = t?.categoria || cat || 'urgente'; D.version = t?.version; D.disparador = document.activeElement;
-  const pago = D.tipo === 'pago', editable = esEscritor() && !(t?.estado === 'propuesta' && S.rol !== 'owner');
+  const pago = D.tipo === 'pago', editable = t ? puedeEditar(t) : esEscritor();
   $('#dlgTitle').textContent = !t ? (pago ? 'Nuevo pago' : 'Nueva actividad') : t.estado === 'propuesta' ? 'Revisar antes de confirmar' : editable ? (pago ? 'Editar pago' : 'Editar actividad') : 'Detalle';
   $('#lTitulo').textContent = pago ? 'Concepto del pago' : 'Qué hay que hacer'; $('#lFecha').textContent = pago ? 'Fecha de pago' : 'Fecha límite';
   $('#wPago').hidden = !pago;
-  $('#iTitulo').value = t?.titulo || ''; $('#iDir').value = t?.area || GENERAL; $('#iFecha').value = t?.fecha_limite || '';
+  $('#iTitulo').value = t?.titulo || ''; $('#iDir').value = t?.area || (S.rol === 'miembro' ? S.user.area : GENERAL); $('#iFecha').value = t?.fecha_limite || '';
   $('#iMonto').value = t?.monto ? new Intl.NumberFormat('es-CO').format(t.monto) : ''; $('#iRec').value = t?.recurrente || 'no'; $('#iRec').disabled = Boolean(t);
   $('#iResp').value = t?.responsable || ''; $('#iOrigen').value = t?.origen || ''; $('#iNotas').value = t?.notas || '';
   $('#dlgErr').textContent = ''; dlg.querySelectorAll('[aria-invalid]').forEach(e => e.removeAttribute('aria-invalid'));
   desarmar();
   dlg.querySelectorAll('#dlgForm input,#dlgForm select,#dlgForm textarea,#iCat button').forEach(el => { el.disabled = !editable; });
   if (t) $('#iRec').disabled = true;
+  if (S.rol === 'miembro') $('#iDir').disabled = true; // un miembro solo trabaja en su dirección
   $('#bGuardar').hidden = !editable; $('#bGuardar').textContent = t?.estado === 'propuesta' ? 'Confirmar' : 'Guardar';
-  $('#bEliminar').hidden = !t || S.rol !== 'owner'; $('#bDescartar').hidden = !t || S.rol !== 'owner' || t.estado === 'descartada';
+  $('#bEliminar').hidden = !t || S.rol !== 'admin'; $('#bDescartar').hidden = !t || S.rol !== 'admin' || t.estado === 'descartada';
   pintarSeg(); pintarGit(t); pintarHist(t);
   dlg.showModal(); if (editable) $('#iTitulo').focus();
 }
@@ -331,9 +340,9 @@ async function pintarGit(t) {
   const num = h('input', { type: 'number', min: '1', 'aria-label': 'Número de issue o PR', placeholder: '#' });
   w.append(h('h3', { text: 'GitHub' }),
     ...links.map(l => h('div', { class: 'issue' }, h('span', {}, h('a', { href: l.url, target: '_blank', rel: 'noopener noreferrer', text: `${l.repo}#${l.numero}` }), ` ${l.tipo === 'pr' ? 'PR' : 'issue'} · ${l.estado}`),
-      esEscritor() ? h('button', { class: 'btn sm quiet', type: 'button', text: 'Quitar', onclick: async () => { try { await api.del(`/links/${l.id}`); pintarGit(t); cargar(); } catch (e) { fallo(e); } } }) : null)),
+      puedeEditar(t) ? h('button', { class: 'btn sm quiet', type: 'button', text: 'Quitar', onclick: async () => { try { await api.del(`/links/${l.id}`); pintarGit(t); cargar(); } catch (e) { fallo(e); } } }) : null)),
     links.length ? h('button', { class: 'btn sm', type: 'button', text: 'Actualizar estado', onclick: async () => { try { await api.post(`/tasks/${t.id}/links/refresh`); pintarGit(t); } catch (e) { fallo(e); } } }) : null,
-    esEscritor() && gh.configurado && gh.repos.length ? h('div', { class: 'row-btns' }, repoSel,
+    puedeEditar(t) && gh.configurado && gh.repos.length ? h('div', { class: 'row-btns' }, repoSel,
       h('button', { class: 'btn sm', type: 'button', text: 'Crear issue', onclick: async () => { try { await api.post(`/tasks/${t.id}/issue`, { repo: repoSel.value }); toast('Issue creado.'); pintarGit(t); cargar(); } catch (e) { fallo(e); } } }),
       num, h('button', { class: 'btn sm', type: 'button', text: 'Vincular', onclick: async () => { try { await api.post(`/tasks/${t.id}/links`, { repo: repoSel.value, numero: Number(num.value) }); pintarGit(t); cargar(); } catch (e) { fallo(e); } } }))
       : h('p', { class: 'hint', text: gh.configurado ? '' : 'GitHub no está configurado en el servidor.' }));
@@ -387,6 +396,8 @@ function poblarSelects() {
   $('#fDir').replaceChildren(h('option', { value: 'todas', text: 'Ver todo el tablero' }), ...areas.map(opt));
   $('#iDir').replaceChildren(...areas.map(opt));
   if (S.ui.dir !== 'todas' && !areas.includes(S.ui.dir)) S.ui.dir = 'todas';
+  if (S.rol !== 'admin') S.ui.dir = 'todas';
+  $('#fDir').hidden = S.rol !== 'admin'; // cada miembro ya ve solo su dirección
   $('#fDir').value = S.ui.dir;
 }
 function irPestana(id) { S.ui.tab = id; render(); }
@@ -404,10 +415,19 @@ $('#bTema').addEventListener('click', () => {
   const r = document.documentElement, oscuro = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   r.dataset.theme = oscuro ? 'light' : 'dark'; try { localStorage.setItem('liva-tema', r.dataset.theme); } catch {}
 });
-$('#bSalir').addEventListener('click', async () => { try { await api.post('/logout'); } catch {} S.rol = null; S.tasks = []; S.props = []; mostrar(); });
+$('#bSalir').addEventListener('click', async () => { try { await api.post('/logout'); } catch {} S.cfg = null; sinSesion(); });
+$('#bCuenta').addEventListener('click', () => abrirGen('Cambiar mi clave', formClave({ forzado: false, alOk: () => { gen.close(); toast('Clave actualizada.'); cargar(); } })));
+$('#lVer').addEventListener('click', e => {
+  const i = $('#lClave'), ver = i.type === 'password';
+  i.type = ver ? 'text' : 'password'; e.currentTarget.textContent = ver ? 'Ocultar' : 'Ver';
+  e.currentTarget.setAttribute('aria-pressed', String(ver)); e.currentTarget.setAttribute('aria-label', ver ? 'Ocultar la clave' : 'Mostrar la clave');
+});
 $('#loginForm').addEventListener('submit', async e => {
-  e.preventDefault(); $('#lErr').textContent = '';
-  try { await api.post('/login', { token: $('#lClave').value }); $('#lClave').value = ''; await arrancar(); } catch (err) { $('#lErr').textContent = err.message; }
+  e.preventDefault(); const btn = $('#lEntrar'); if (btn.disabled) return;
+  $('#lErr').textContent = ''; btn.disabled = true; btn.textContent = 'Entrando…';
+  try { await api.post('/login', { email: $('#lCorreo').value, password: $('#lClave').value }); $('#lClave').value = ''; S.error = ''; await arrancar(); }
+  catch (err) { $('#lErr').textContent = err.message; $('#lClave').select(); }
+  finally { btn.disabled = false; btn.textContent = 'Entrar'; }
 });
 $('#bResumen').addEventListener('click', async () => {
   const a = S.tasks.filter(t => t.tipo === 'actividad' && t.estado === 'pendiente' && pasaDir(t));
@@ -419,11 +439,92 @@ $('#bResumen').addEventListener('click', async () => {
 document.addEventListener('keydown', e => {
   if (e.key !== 'n' || dlg.open || e.metaKey || e.ctrlKey || e.altKey || !esEscritor()) return;
   if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return;
-  e.preventDefault(); abrir(S.ui.tab === 'pagos' && S.rol === 'owner' ? 'pago' : 'actividad', null, 'urgente');
+  e.preventDefault(); abrir(S.ui.tab === 'pagos' && S.rol === 'admin' ? 'pago' : 'actividad', null, 'urgente');
 });
-document.body.append(h('button', { class: 'fab', type: 'button', 'aria-label': 'Nueva actividad', text: '+', onclick: () => esEscritor() && !dlg.open && abrir(S.ui.tab === 'pagos' && S.rol === 'owner' ? 'pago' : 'actividad', null, 'urgente') }));
+document.body.append(h('button', { class: 'fab', type: 'button', 'aria-label': 'Nueva actividad', text: '+', onclick: () => esEscritor() && !dlg.open && abrir(S.ui.tab === 'pagos' && S.rol === 'admin' ? 'pago' : 'actividad', null, 'urgente') }));
+
+/* ---------- diálogo genérico, cambio de clave y usuarios ---------- */
+const gen = $('#dlgGen');
+function abrirGen(titulo, cuerpo) {
+  $('#genTitulo').textContent = titulo; $('#genCuerpo').replaceChildren(...[].concat(cuerpo)); gen.showModal();
+  gen.querySelector('input:not([disabled]),select:not([disabled])')?.focus();
+}
+function formClave({ forzado, alOk }) {
+  const campo = (id, etiqueta, auto) => h('div', { class: 'field' }, h('label', { for: id, text: etiqueta }), h('input', { id, type: 'password', autocomplete: auto, required: true }));
+  const err = h('p', { class: 'err', role: 'alert' });
+  const enviar = h('button', { class: 'btn primary big', type: 'submit', text: 'Guardar clave' });
+  return h('form', { novalidate: true, onsubmit: async ev => {
+    ev.preventDefault(); if (enviar.disabled) return; err.textContent = '';
+    const [act, nue, rep] = ['cpActual', 'cpNueva', 'cpRep'].map(i => $('#' + i));
+    if (nue.value.length < 10) { err.textContent = 'La clave nueva debe tener al menos 10 caracteres.'; return nue.focus(); }
+    if (nue.value !== rep.value) { err.textContent = 'Las claves nuevas no coinciden.'; return rep.focus(); }
+    enviar.disabled = true;
+    try { await api.post('/me/password', { actual: act.value, nueva: nue.value }); await alOk(); }
+    catch (e) { err.textContent = e.message; act.focus(); } finally { enviar.disabled = false; }
+  } },
+  campo('cpActual', forzado ? 'Clave temporal' : 'Clave actual', 'current-password'),
+  campo('cpNueva', 'Clave nueva (mínimo 10 caracteres)', 'new-password'),
+  campo('cpRep', 'Repite la clave nueva', 'new-password'),
+  err, enviar,
+  forzado ? h('button', { class: 'btn quiet', type: 'button', text: 'Salir', onclick: () => $('#bSalir').click() }) : h('button', { class: 'btn quiet', type: 'button', text: 'Cancelar', onclick: () => gen.close() }));
+}
+
+function renderUsuarios() {
+  const cont = $('#usuarios');
+  if (!S.users.length) { cont.replaceChildren(h('div', { class: 'vacio', text: 'Aún no hay usuarios.' })); return; }
+  cont.replaceChildren(h('div', { class: 'lista-usuarios' }, S.users.map(u => h('div', { class: `user-row ${u.activo ? '' : 'inactivo'}` },
+    h('div', {}, h('strong', { text: u.nombre }), h('span', { class: 'meta', text: u.email + (u.activo ? '' : ' · desactivado') })),
+    h('span', { class: `chip-rol ${u.rol}`, text: ROLES[u.rol] }),
+    h('span', { text: u.area || 'Todas las direcciones' }),
+    h('span', { class: 'meta', text: u.must_change ? 'Pendiente de primer ingreso' : u.last_login ? 'Último ingreso ' + new Date(u.last_login).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }) : 'Nunca ingresó' }),
+    h('div', { class: 'pr-acts' },
+      h('button', { class: 'btn sm', type: 'button', text: 'Editar', onclick: () => formUsuario(u) }),
+      h('button', { class: 'btn sm', type: 'button', text: 'Restablecer clave', onclick: () => restablecer(u) }),
+      h('button', { class: 'btn sm quiet', type: 'button', text: u.activo ? 'Desactivar' : 'Activar', disabled: u.id === S.user.id,
+        onclick: async () => { if (u.activo && !confirm(`¿Desactivar a ${u.nombre}? Su sesión se cerrará de inmediato.`)) return;
+          try { await api.patch(`/users/${u.id}`, { activo: !u.activo }); await cargar(); toast(u.activo ? 'Usuario desactivado.' : 'Usuario activado.'); } catch (e) { fallo(e); } } }))))));
+}
+function mostrarTemporal(nombre, email, temporal) {
+  const campo = h('input', { type: 'text', readonly: true, value: temporal, 'aria-label': 'Clave temporal' });
+  abrirGen('Clave temporal', [
+    h('p', { text: `Entrega estos datos a ${nombre} por un canal seguro. La clave se muestra solo esta vez; al ingresar tendrá que cambiarla.` }),
+    h('p', {}, h('strong', { text: 'Correo: ' }), email),
+    h('div', { class: 'temp-box' }, campo, h('button', { class: 'btn', type: 'button', text: 'Copiar', onclick: async () => { try { await navigator.clipboard.writeText(temporal); toast('Clave copiada.'); } catch { campo.select(); toast('Selecciónala y cópiala manualmente.'); } } })),
+    h('div', { class: 'dlg-f' }, h('div', {}), h('div', {}, h('button', { class: 'btn primary', type: 'button', text: 'Listo', onclick: () => gen.close() })))]);
+  campo.select();
+}
+async function restablecer(u) {
+  if (!confirm(`¿Restablecer la clave de ${u.nombre}? Se cerrará su sesión y deberá usar una clave temporal.`)) return;
+  try { const r = await api.post(`/users/${u.id}/reset`); await cargar(); mostrarTemporal(u.nombre, u.email, r.temporal); } catch (e) { fallo(e); }
+}
+function formUsuario(u) {
+  const nuevo = !u;
+  const nombre = h('input', { id: 'uNombre', maxlength: '80', value: u?.nombre || '', required: true, autocomplete: 'off' });
+  const correo = h('input', { id: 'uCorreo', type: 'email', value: u?.email || '', disabled: !nuevo, required: true, autocomplete: 'off' });
+  const rol = h('select', { id: 'uRol' }, Object.entries(ROLES).map(([v, t]) => h('option', { value: v, text: t + (v === 'miembro' ? ' (edita su dirección)' : v === 'lector' ? ' (solo ve su dirección)' : ' (ve todo)') })));
+  rol.value = u?.rol || 'miembro';
+  const area = h('select', { id: 'uArea' }, S.cfg.areas.filter(a => a !== TODOS).map(a => h('option', { value: a, text: a })));
+  if (u?.area) area.value = u.area;
+  const campoArea = h('div', { class: 'field' }, h('label', { for: 'uArea', text: 'Dirección' }), area);
+  const sync = () => { campoArea.hidden = rol.value === 'admin'; }; rol.addEventListener('change', sync); sync();
+  const err = h('p', { class: 'err', role: 'alert' });
+  const enviar = h('button', { class: 'btn primary', type: 'submit', text: nuevo ? 'Crear usuario' : 'Guardar' });
+  abrirGen(nuevo ? 'Nuevo usuario' : 'Editar usuario', h('form', { novalidate: true, onsubmit: async ev => {
+    ev.preventDefault(); if (enviar.disabled) return; err.textContent = ''; enviar.disabled = true;
+    try {
+      const datos = { nombre: nombre.value, rol: rol.value, area: rol.value === 'admin' ? null : area.value };
+      if (nuevo) { const r = await api.post('/users', { ...datos, email: correo.value }); gen.close(); await cargar(); mostrarTemporal(r.usuario.nombre, r.usuario.email, r.temporal); }
+      else { await api.patch(`/users/${u.id}`, datos); gen.close(); await cargar(); toast('Usuario actualizado.'); }
+    } catch (e) { err.textContent = e.message; } finally { enviar.disabled = false; }
+  } },
+  h('div', { class: 'field' }, h('label', { for: 'uNombre', text: 'Nombre' }), nombre),
+  h('div', { class: 'field' }, h('label', { for: 'uCorreo', text: 'Correo' }), correo),
+  h('div', { class: 'field' }, h('label', { for: 'uRol', text: 'Rol' }), rol), campoArea, err,
+  h('div', { class: 'dlg-f' }, h('div', {}), h('div', {}, h('button', { class: 'btn', type: 'button', text: 'Cancelar', onclick: () => gen.close() }), enviar))));
+}
+$('#bNuevoUsuario').addEventListener('click', () => formUsuario(null));
 
 // Sincronización: al volver a la pestaña y cada 30 s; también refresca el "hoy" tras medianoche.
-document.addEventListener('visibilitychange', () => { if (!document.hidden && S.rol && !dlg.open) cargar(); });
-setInterval(() => { if (S.rol && !document.hidden && !dlg.open) cargar(); }, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.user && !S.user.must_change && !dlg.open && !gen.open) cargar(); });
+setInterval(() => { if (S.user && !S.user.must_change && !document.hidden && !dlg.open && !gen.open) cargar(); }, 30000);
 arrancar();

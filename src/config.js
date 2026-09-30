@@ -20,9 +20,14 @@ export const AREA_ALIAS = {
 
 export function loadConfig(env = process.env) {
   const prod = env.NODE_ENV === 'production';
+  // OWNER_TOKEN es la contraseña INICIAL del administrador (se exige cambiarla en el primer ingreso).
   const ownerToken = env.OWNER_TOKEN || '';
+  const adminEmail = (env.ADMIN_EMAIL || '').trim().toLowerCase();
   if (prod && ownerToken.length < 12) {
-    throw new Error('OWNER_TOKEN es obligatorio en producción (mínimo 12 caracteres).');
+    throw new Error('OWNER_TOKEN es obligatorio en producción (contraseña inicial del admin, mínimo 12 caracteres).');
+  }
+  if (prod && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(adminEmail)) {
+    throw new Error('ADMIN_EMAIL es obligatorio en producción (correo del administrador).');
   }
   // En serverless cada instancia arranca por separado: sin un secreto fijo las sesiones no serían válidas entre instancias.
   if (prod && (env.SESSION_SECRET || '').length < 16) {
@@ -37,8 +42,8 @@ export function loadConfig(env = process.env) {
     port: Number(env.PORT || 3000),
     dbUrl,
     ownerToken,
-    editorToken: env.EDITOR_TOKEN || '',
-    viewerToken: env.VIEWER_TOKEN || '',
+    adminEmail,
+    adminRecovery: env.ADMIN_RECOVERY === 'true',
     sessionSecret: env.SESSION_SECRET || randomBytes(32).toString('hex'),
     githubToken: env.GITHUB_TOKEN || '',
     githubRepos: (env.GITHUB_REPOS || '').split(',').map(s => s.trim()).filter(Boolean)
