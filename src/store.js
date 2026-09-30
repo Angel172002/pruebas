@@ -90,8 +90,8 @@ export function crearStore(db) {
     const fecha = sumarMes(t.fecha_limite, serie.dia_ancla);
     if (serie.fin_fecha && fecha > serie.fin_fecha) return null;
     const id = randomUUID(), ts = ahora();
-    const r = await x.run(`INSERT OR IGNORE INTO tasks(id,tipo,titulo,categoria,area,responsable,fecha_limite,estado,origen,notas,monto,serie_id,periodo,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,'pendiente',?,?,?,?,?,?,?)`,
+    const r = await x.run(`INSERT INTO tasks(id,tipo,titulo,categoria,area,responsable,fecha_limite,estado,origen,notas,monto,serie_id,periodo,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,'pendiente',?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
       [id, 'pago', t.titulo, t.categoria, t.area, t.responsable, fecha, t.origen, t.notas, t.monto, t.serie_id, fecha.slice(0, 7), ts, ts]);
     if (!r.changes) return null;
     await evento(x, id, actor, 'crear', `Recurrente desde ${t.id}`);

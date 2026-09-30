@@ -1,16 +1,16 @@
 CREATE TABLE tasks (
   id            TEXT PRIMARY KEY,
   tipo          TEXT NOT NULL CHECK (tipo IN ('actividad','pago')),
-  titulo        TEXT NOT NULL CHECK (length(titulo) BETWEEN 1 AND 160),
+  titulo        TEXT NOT NULL CHECK (char_length(titulo) BETWEEN 1 AND 160),
   categoria     TEXT NOT NULL CHECK (categoria IN ('urgente','prioritario','importante')),
   area          TEXT NOT NULL,
   responsable   TEXT NOT NULL DEFAULT '',
-  fecha_limite  TEXT CHECK (fecha_limite IS NULL OR fecha_limite GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  fecha_limite  TEXT CHECK (fecha_limite IS NULL OR fecha_limite ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'),
   estado        TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('propuesta','pendiente','cerrada','descartada')),
   cerrada_at    TEXT,
   origen        TEXT NOT NULL DEFAULT '',
   notas         TEXT NOT NULL DEFAULT '',
-  monto         INTEGER CHECK (monto IS NULL OR monto >= 0),
+  monto         BIGINT CHECK (monto IS NULL OR monto >= 0),
   serie_id      TEXT,
   periodo       TEXT,
   version       INTEGER NOT NULL DEFAULT 1,
@@ -31,7 +31,7 @@ CREATE TABLE series (
 );
 
 CREATE TABLE task_events (
-  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  id       BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   task_id  TEXT NOT NULL,
   actor    TEXT NOT NULL,
   accion   TEXT NOT NULL,
@@ -41,7 +41,7 @@ CREATE TABLE task_events (
 CREATE INDEX idx_events_task ON task_events(task_id, id);
 
 CREATE TABLE github_links (
-  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  id        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   task_id   TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   repo      TEXT NOT NULL,
   tipo      TEXT NOT NULL CHECK (tipo IN ('issue','pr')),

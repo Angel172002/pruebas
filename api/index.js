@@ -1,4 +1,4 @@
-// Entrada serverless de Vercel. La base (Turso/libSQL) se abre y migra una sola vez por instancia.
+// Entrada serverless de Vercel. La base (Neon/Postgres) se abre y migra una sola vez por instancia.
 import { loadConfig } from '../src/config.js';
 import { openDb } from '../src/db.js';
 import { crearApp } from '../src/app.js';
@@ -6,7 +6,7 @@ import { crearApp } from '../src/app.js';
 let app;
 async function iniciar() {
   const cfg = loadConfig();
-  return crearApp({ cfg, db: await openDb({ url: cfg.dbUrl, authToken: cfg.dbAuthToken }) });
+  return crearApp({ cfg, db: await openDb({ url: cfg.dbUrl }) });
 }
 let cargando;
 export default async function handler(req, res) {

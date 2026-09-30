@@ -1,5 +1,4 @@
 import express from 'express';
-import { mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -163,15 +162,4 @@ export function crearApp({ cfg, db, fetchImpl }) {
     res.status(status).json({ error: status >= 500 && !(err instanceof GitHubError) ? `Error interno (ref ${id}).` : err.message });
   });
   return app;
-}
-
-/** Copia consistente de la base local (VACUUM INTO) con rotación. En bases remotas (Turso) usa los backups del proveedor. */
-export async function hacerBackup(db, dir, keep) {
-  if (!db.local) throw new Error('El backup por archivo solo aplica a bases locales.');
-  mkdirSync(dir, { recursive: true });
-  const f = join(dir, `liva-${new Date().toISOString().replace(/[:.]/g, '-')}.db`);
-  await db.run(`VACUUM INTO '${f.replace(/'/g, "''")}'`);
-  const viejos = readdirSync(dir).filter(n => /^liva-.*\.db$/.test(n)).map(n => [n, statSync(join(dir, n)).mtimeMs]).sort((a, b) => b[1] - a[1]).slice(keep);
-  viejos.forEach(([n]) => unlinkSync(join(dir, n)));
-  return f;
 }

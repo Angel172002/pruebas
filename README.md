@@ -13,7 +13,7 @@ npm start                 # http://localhost:3000
 npm test
 ```
 
-Node 22+. Base de datos libSQL (compatible con SQLite): archivo local por defecto (`DB_PATH`) o Turso en la nube (`DATABASE_URL`). Migraciones automáticas en `migrations/`.
+Node 22+. Base de datos **PostgreSQL**: en local usa PGlite (Postgres embebido, sin instalar nada, datos en `./data/pglite`); en producción, Neon u otro Postgres vía `DATABASE_URL`. Migraciones automáticas en `migrations/`.
 
 ## Roles y seguridad
 
@@ -46,20 +46,20 @@ Configura en el servidor `GITHUB_TOKEN` (fine-grained PAT, solo los repos necesa
 y `GITHUB_REPOS=dueño/repo,otro/repo` (lista permitida). Desde una actividad puedes **crear un issue**, **vincular** uno existente
 y **actualizar su estado**; desde *Datos y GitHub* importas issues abiertos como propuestas. El token nunca llega al navegador.
 
-## Desplegar en Vercel
+## Desplegar en Vercel + Neon
 
-Vercel es serverless (disco efímero), por eso en producción la base es **Turso** (libSQL, plan gratuito disponible).
+Vercel es serverless (disco efímero), por eso en producción la base es **Neon** (Postgres gestionado, plan gratuito disponible).
 
-1. **Base de datos**: crea una en [turso.tech](https://turso.tech) y obtén la URL y un token:
-   `turso db create liva && turso db show liva --url && turso db tokens create liva`
-2. **Importar el repo** en [vercel.com/new](https://vercel.com/new) (Framework: *Other*; no hay build). Rama de producción: `main`.
+1. **Importar el repo** en [vercel.com/new](https://vercel.com/new) (Framework: *Other*; no hay build). Rama de producción: `main`.
+2. **Base de datos**: en el proyecto de Vercel → *Storage* → *Create Database* → **Neon** (Marketplace). Conéctala al proyecto:
+   Vercel define `DATABASE_URL` automáticamente (usa la cadena *pooled*, con `-pooler`). Alternativa manual: crea el proyecto en
+   [neon.tech](https://neon.tech) y copia la *Connection string* pooled.
 3. **Variables de entorno** (Project → Settings → Environment Variables):
 
    | Variable | Valor |
    |---|---|
    | `NODE_ENV` | `production` |
-   | `DATABASE_URL` | `libsql://…turso.io` |
-   | `DATABASE_AUTH_TOKEN` | token de Turso |
+   | `DATABASE_URL` | la pone la integración de Neon |
    | `OWNER_TOKEN` | clave larga (≥ 12) |
    | `SESSION_SECRET` | aleatorio (≥ 16): `openssl rand -hex 32` |
    | `EDITOR_TOKEN`, `VIEWER_TOKEN` | opcionales |
@@ -67,12 +67,13 @@ Vercel es serverless (disco efímero), por eso en producción la base es **Turso
 4. Despliega. Comprueba `https://<tu-app>.vercel.app/readyz`. Las migraciones se aplican solas en el primer arranque.
 
 Notas: el límite de intentos de login es por instancia (en serverless es una protección básica; usa claves largas).
-Los backups los gestiona Turso; guarda además copias con *Exportar JSON*.
+Respaldo: Neon ofrece restauración a un punto en el tiempo y *branches*; guarda además copias con *Exportar JSON*.
+Usa un *branch* de Neon distinto para *preview deployments* si no quieres que los PR toquen los datos reales.
 
 ## Otras opciones
 
-- **Docker / Render / Fly.io**: `docker build -t liva . && docker run -p 3000:3000 -v liva-data:/data -e NODE_ENV=production -e OWNER_TOKEN=… -e SESSION_SECRET=… liva`.
-  `render.yaml` incluye un Blueprint con disco persistente (plan de pago). Copias automáticas en `BACKUP_DIR` para bases locales.
+- **Docker / Render / Fly.io**: `docker build -t liva . && docker run -p 3000:3000 -e NODE_ENV=production -e DATABASE_URL=… -e OWNER_TOKEN=… -e SESSION_SECRET=… liva`.
+  `render.yaml` incluye un Blueprint (sin disco: la base es Neon).
 - `/healthz` y `/readyz` para health checks. Logs JSON a stdout.
 
 ## Flujo de trabajo del repositorio
@@ -88,7 +89,7 @@ api/         entrada serverless de Vercel
 src/         server, app (rutas), store (lógica transaccional), domain (reglas), auth, portability, services/github
 public/      frontend (módulos ES, sin build, sin innerHTML con datos)
 migrations/  SQL versionado (tabla schema_migrations)
-test/        node:test (API, roles, recurrencia, importación, GitHub simulado)
+test/        node:test (API, roles, recurrencia, importación, GitHub simulado); con `TEST_DATABASE_URL` corre contra Postgres real
 ```
 
 ## Fuera de alcance por ahora

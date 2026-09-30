@@ -14,7 +14,8 @@
     "check": "node --check src/server.js && node --check api/index.js && node --check public/app.js"
   },
   "dependencies": {
-    "@libsql/client": "^0.18.0",
-    "express": "^5.1.0"
+    "@electric-sql/pglite": "^0.5.8",
+    "express": "^5.1.0",
+    "pg": "^8.23.1"
   }
 }

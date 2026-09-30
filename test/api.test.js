@@ -22,7 +22,7 @@ before(async () => {
   ghCalls = [];
   const cfg = loadConfig({ OWNER_TOKEN: 'owner-secret-123', SESSION_SECRET: 'test-session-secret-123', EDITOR_TOKEN: 'editor-secret-123', VIEWER_TOKEN: 'viewer-secret-1', GITHUB_TOKEN: 'ghp_x', GITHUB_REPOS: 'o/r' });
   dir = mkdtempSync(join(tmpdir(), 'liva-'));
-  db = await openDb({ url: `file:${join(dir, 'test.db')}` });
+  db = await openDb({ url: process.env.TEST_DATABASE_URL || `pglite:${join(dir, 'pg')}` });
   server = crearApp({ cfg, db, fetchImpl: fakeFetch }).listen(0);
   base = `http://127.0.0.1:${server.address().port}`;
   for (const [rol, token] of [['owner', 'owner-secret-123'], ['editor', 'editor-secret-123'], ['viewer', 'viewer-secret-1']]) {
@@ -167,9 +167,14 @@ test('eliminar deja rastro en la auditoría', async () => {
 
 test('migraciones idempotentes y producción exige secretos', async () => {
   const { openDb: abrir } = await import('../src/db.js');
-  const d2 = await abrir({ url: `file:${join(dir, 'test.db')}` }); // reabrir no re-ejecuta migraciones
-  assert.equal((await d2.all('SELECT name FROM schema_migrations')).length, 1);
-  d2.close();
+  assert.equal((await db.all('SELECT name FROM schema_migrations')).length, 1);
+  await assert.rejects(abrir({ url: 'postgres://invalido:1/x' }).then(() => {}), Error); // no se traga errores de conexión
   assert.throws(() => loadConfig({ NODE_ENV: 'production', OWNER_TOKEN: 'x'.repeat(12) }), /SESSION_SECRET/);
   assert.throws(() => loadConfig({ NODE_ENV: 'production', SESSION_SECRET: 'x'.repeat(16) }), /OWNER_TOKEN/);
+});
+
+test('producción exige DATABASE_URL de Postgres', () => {
+  const base = { NODE_ENV: 'production', OWNER_TOKEN: 'x'.repeat(12), SESSION_SECRET: 'y'.repeat(16) };
+  assert.throws(() => loadConfig(base), /DATABASE_URL/);
+  assert.equal(loadConfig({ ...base, DATABASE_URL: 'postgresql://u:p@host/db?sslmode=require' }).prod, true);
 });

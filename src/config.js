@@ -28,19 +28,19 @@ export function loadConfig(env = process.env) {
   if (prod && (env.SESSION_SECRET || '').length < 16) {
     throw new Error('SESSION_SECRET es obligatorio en producción (mínimo 16 caracteres).');
   }
+  const dbUrl = env.DATABASE_URL || `pglite:${env.DB_PATH || './data/pglite'}`;
+  if (prod && !/^postgres(ql)?:\/\//.test(dbUrl)) {
+    throw new Error('DATABASE_URL (postgres://…, p. ej. Neon) es obligatorio en producción.');
+  }
   return {
     prod,
     port: Number(env.PORT || 3000),
-    dbUrl: env.DATABASE_URL || `file:${env.DB_PATH || './data/app.db'}`,
-    dbAuthToken: env.DATABASE_AUTH_TOKEN || '',
+    dbUrl,
     ownerToken,
     editorToken: env.EDITOR_TOKEN || '',
     viewerToken: env.VIEWER_TOKEN || '',
     sessionSecret: env.SESSION_SECRET || randomBytes(32).toString('hex'),
     githubToken: env.GITHUB_TOKEN || '',
-    githubRepos: (env.GITHUB_REPOS || '').split(',').map(s => s.trim()).filter(Boolean),
-    backupDir: env.BACKUP_DIR || '',
-    backupEveryHours: Number(env.BACKUP_EVERY_HOURS || 24),
-    backupKeep: Number(env.BACKUP_KEEP || 7)
+    githubRepos: (env.GITHUB_REPOS || '').split(',').map(s => s.trim()).filter(Boolean)
   };
 }

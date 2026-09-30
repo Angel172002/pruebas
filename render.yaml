@@ -1,4 +1,4 @@
-# Blueprint de Render. SQLite necesita disco persistente (plan de pago); sin disco la base se pierde en cada deploy.
+# Blueprint de Render. La base es Postgres externo (Neon): pega su cadena de conexión en DATABASE_URL.
 services:
   - type: web
     name: gestor-directivo-liva
@@ -6,11 +6,9 @@ services:
     plan: starter
     healthCheckPath: /readyz
     autoDeploy: true
-    disk:
-      name: data
-      mountPath: /data
-      sizeGB: 1
     envVars:
+      - key: DATABASE_URL
+        sync: false
       - key: OWNER_TOKEN
         sync: false
       - key: EDITOR_TOKEN
