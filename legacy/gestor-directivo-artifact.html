@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gestor Directivo – LIVA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FFFFFF; --surface:#FFFFFF; --surface-2:#F6F7F8; --ink:#141A21; --ink-2:#4B5663; --line:#E0E3E6;
+  --urg:#E3141B; --urg-soft:#FDE2E2; --urg-ink:#C10F15;
+  --pri:#FFC400; --pri-soft:#FFF3C4; --pri-ink:#8A6400;
+  --imp:#10A64A; --imp-soft:#DCF6E6; --imp-ink:#0B7A36;
+  --ok:#10A64A; --focus:#141A21; --shadow:0 1px 2px rgba(20,26,33,.08);
+  --font-d:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --font-b:"Public Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#131920; --surface:#1B232D; --surface-2:#212B36; --ink:#E6EBEE; --ink-2:#A2AEBA; --line:#2F3B48;
+    --urg:#F06A62; --urg-soft:#3A2225; --urg-ink:#F06A62; --pri:#F5C21B; --pri-soft:#3A301F; --pri-ink:#F5C21B;
+    --imp:#3CCB78; --imp-soft:#173524; --imp-ink:#6FD39A; --ok:#5CC195; --focus:#E6EBEE; --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131920; --surface:#1B232D; --surface-2:#212B36; --ink:#E6EBEE; --ink-2:#A2AEBA; --line:#2F3B48;
+  --urg:#F06A62; --urg-soft:#3A2225; --urg-ink:#F06A62; --pri:#F5C21B; --pri-soft:#3A301F; --pri-ink:#F5C21B;
+  --imp:#3CCB78; --imp-soft:#173524; --imp-ink:#6FD39A; --ok:#5CC195; --focus:#E6EBEE; --shadow:none;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-b);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button,select,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+[hidden]{display:none!important}
+.wrap{max-width:1320px;margin:0 auto;padding:24px 20px 56px}
+
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px}
+.top h1{font-family:var(--font-d);font-weight:700;font-size:clamp(26px,3.4vw,36px);line-height:1.05;margin:0;letter-spacing:-.015em}
+.top .hoy{margin:4px 0 0;color:var(--ink-2)}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.controls select{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-height:40px}
+.toggle{display:inline-flex;align-items:center;gap:8px;color:var(--ink-2);cursor:pointer;min-height:40px}
+.toggle input{width:18px;height:18px;accent-color:var(--ink)}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 14px;min-height:40px;cursor:pointer;font-weight:500}
+.btn:hover{border-color:var(--ink-2)}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.primary:hover{opacity:.9}
+.btn.danger{color:var(--urg-ink);border-color:transparent;background:transparent}
+.btn.danger.confirmando{background:var(--urg);color:#fff;border-color:var(--urg)}
+.btn.quiet{border-color:transparent;background:transparent;color:var(--ink-2)}
+.btn.sm{min-height:34px;padding:5px 11px;font-size:14px}
+.aviso{background:var(--pri-soft);border:1px solid var(--pri);border-radius:10px;padding:10px 14px;margin-bottom:18px;font-size:14px}
+
+/* Pestañas */
+.tabs{display:flex;gap:4px;border-bottom:2px solid var(--line);margin-bottom:18px}
+.tab{border:0;background:transparent;padding:10px 18px 12px;margin-bottom:-2px;border-bottom:3px solid transparent;cursor:pointer;font-family:var(--font-d);font-weight:700;font-size:19px;color:var(--ink-2);display:flex;gap:8px;align-items:center;min-height:44px}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+.tab .n{font-family:var(--font-b);font-size:13px;font-weight:600;background:var(--surface-2);border:1px solid var(--line);border-radius:99px;padding:0 8px;min-width:24px;text-align:center}
+.tab .n.alerta:not(:empty):not([data-cero]){background:var(--urg);color:#fff;border-color:var(--urg)}
+.tab[aria-selected="true"] .n{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+.bar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}
+.resumen{display:flex;flex-wrap:wrap;gap:8px 28px;margin:0;padding:0;list-style:none;color:var(--ink-2);font-size:14px}
+.resumen strong{color:var(--ink);font-weight:600;font-size:16px;margin-right:4px}
+.resumen .rojo strong{color:var(--urg-ink)}
+
+/* Por confirmar */
+.inbox{border:1px solid var(--line);border-radius:14px;margin-bottom:22px;overflow:hidden;background:var(--surface)}
+.inbox-h{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;justify-content:space-between;padding:14px 18px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+.inbox-h h2{font-family:var(--font-d);font-weight:700;font-size:20px;margin:0}
+.inbox-h p{margin:0;color:var(--ink-2);font-size:14px}
+.reu{border-top:1px solid var(--line)}
+.reu:first-of-type{border-top:0}
+.reu summary{list-style:none;cursor:pointer;display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:12px 18px;min-height:48px}
+.reu summary::-webkit-details-marker{display:none}
+.reu summary::before{content:"";width:8px;height:8px;border-right:2px solid var(--ink-2);border-bottom:2px solid var(--ink-2);transform:rotate(-45deg);transition:transform .15s;flex:0 0 auto}
+.reu[open] summary::before{transform:rotate(45deg)}
+.reu-t{font-weight:600}
+.reu-n{font-size:13px;color:var(--ink-2)}
+.reu-dots{display:flex;gap:4px;margin-left:auto}
+.dot{width:10px;height:10px;border-radius:50%}
+.dot.urgente{background:var(--urg)} .dot.prioritario{background:var(--pri)} .dot.importante{background:var(--imp)} .dot.pago{background:var(--ink-2)}
+.reu-list{padding:0 18px 6px}
+.pr{display:grid;grid-template-columns:1fr auto;gap:8px 16px;align-items:center;padding:10px 0 10px 14px;border-top:1px solid var(--line);position:relative}
+.pr::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:4px;border-radius:2px;background:var(--ink-2)}
+.pr[data-cat="urgente"]::before{background:var(--urg)}
+.pr[data-cat="prioritario"]::before{background:var(--pri)}
+.pr[data-cat="importante"]::before{background:var(--imp)}
+.pr h3{margin:0 0 2px;font-size:15px;font-weight:600;line-height:1.35}
+.pr-nota{margin:3px 0 0;font-size:13px;color:var(--ink-2)}
+.pr-acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:640px){.pr{grid-template-columns:1fr}.pr-acts{justify-content:flex-start}}
+.chip{display:inline-block;font-size:12px;font-weight:600;border-radius:99px;padding:1px 9px}
+.chip.urgente{background:var(--urg);color:#fff}
+.chip.prioritario{background:var(--pri);color:#1C1500}
+.chip.importante{background:var(--imp);color:#fff}
+.reu-f{display:flex;justify-content:flex-end;gap:8px;padding:8px 18px 14px}
+
+/* Tablero */
+.board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start}
+@media (max-width:920px){.board{grid-template-columns:1fr}}
+.col{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.col[data-cat="urgente"]{--c:var(--urg);--on:#FFFFFF;--cink:var(--urg-ink)}
+.col[data-cat="prioritario"]{--c:var(--pri);--on:#1C1500;--cink:var(--pri-ink)}
+.col[data-cat="importante"]{--c:var(--imp);--on:#FFFFFF;--cink:var(--imp-ink)}
+.col-h{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;background:var(--c);color:var(--on);padding:16px 16px 14px}
+.cat{font-family:var(--font-d);font-weight:700;font-size:clamp(30px,3vw,40px);line-height:1;margin:0;letter-spacing:-.015em;display:flex;align-items:center;gap:10px}
+.cat .n{font-family:var(--font-b);font-size:14px;font-weight:600;min-width:26px;text-align:center;padding:1px 8px;border-radius:99px;background:rgba(255,255,255,.28)}
+.col[data-cat="prioritario"] .cat .n{background:rgba(0,0,0,.12)}
+.regla{margin:8px 0 0;font-size:14px;font-weight:600}
+.help{margin:2px 0 0;font-size:13px;opacity:.92;max-width:36ch}
+.add{flex:0 0 auto;width:40px;height:40px;border-radius:50%;border:2px solid var(--on);background:transparent;color:var(--on);font-size:22px;line-height:1;cursor:pointer}
+.add:hover{background:rgba(255,255,255,.2)}
+.col-b{padding:14px}
+.sub{font-size:13px;font-weight:600;color:var(--ink-2);margin:14px 0 6px}
+.sub:first-child{margin-top:0}
+.list{display:flex;flex-direction:column;gap:8px}
+.empty{border:1px dashed var(--line);border-radius:8px;padding:14px;color:var(--ink-2);font-size:14px;margin:0}
+
+.card{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--c,var(--line));border-radius:8px;padding:10px 12px;box-shadow:var(--shadow)}
+.card.escalada{background:var(--urg-soft)}
+.monto{font-weight:700;color:var(--ink)}
+.col-total{margin:6px 0 0;font-family:var(--font-d);font-size:20px;font-weight:700}
+.tipo{font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:4px;padding:0 6px;background:var(--surface-2);color:var(--ink)}
+.inbox-vacio{border:1px dashed var(--line);border-radius:12px;padding:28px;text-align:center;color:var(--ink-2)}
+.check{width:22px;height:22px;margin-top:1px;border-radius:50%;border:2px solid var(--cink,var(--ink-2));background:transparent;cursor:pointer;padding:0;display:grid;place-items:center}
+.check:disabled{cursor:default;opacity:.5}
+.check svg{opacity:0;width:12px;height:12px}
+.check:not(:disabled):hover svg{opacity:.4}
+.card.hecha .check{background:var(--ok);border-color:var(--ok);opacity:1}
+.card.hecha .check svg{opacity:1;stroke:#fff}
+.card.hecha h3{text-decoration:line-through;color:var(--ink-2)}
+.card .body{cursor:pointer;min-width:0;background:none;border:0;padding:0;text-align:left}
+.card h3{margin:0 0 4px;font-size:15px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+.meta{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:13px;color:var(--ink-2);margin:0}
+.tag{border-radius:4px;padding:0 6px;background:var(--surface-2);border:1px solid var(--line)}
+.tag.todos{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.fecha.tarde{color:var(--urg-ink);font-weight:600}
+.fecha.pronto{color:var(--pri-ink);font-weight:600}
+.origen{font-size:12.5px;color:var(--urg-ink);margin:4px 0 0}
+
+/* Pagos */
+.pagos-grid{display:grid;gap:18px}
+.grupo{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
+.grupo-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.grupo-h h2{margin:0;font-family:var(--font-d);font-size:19px;font-weight:700}
+.grupo-h .total{font-family:var(--font-d);font-size:18px;font-weight:700}
+.grupo.vencidos .grupo-h{background:var(--urg);color:#fff;border-color:var(--urg)}
+.grupo.semana .grupo-h{background:var(--pri);color:#1C1500;border-color:var(--pri)}
+.grupo.pagados .grupo-h{background:var(--imp-soft)}
+.pg{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:11px 16px;border-top:1px solid var(--line)}
+.pg:first-child{border-top:0}
+.pg .body{background:none;border:0;padding:0;text-align:left;cursor:pointer;min-width:0}
+.pg h3{margin:0 0 2px;font-size:15px;font-weight:600}
+.pg .valor{font-family:var(--font-d);font-size:18px;font-weight:700;white-space:nowrap}
+.pg.hecha h3{text-decoration:line-through;color:var(--ink-2)}
+.pg.hecha .check{background:var(--ok);border-color:var(--ok)}
+.pg.hecha .check svg{opacity:1;stroke:#fff}
+
+/* Diálogo */
+dialog{border:0;border-radius:14px;padding:0;width:min(580px,calc(100% - 24px));max-height:calc(100% - 32px);background:var(--surface);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(15,20,26,.45)}
+.dlg{padding:20px 22px}
+.dlg h2{font-family:var(--font-d);font-size:22px;margin:0 0 14px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.field label,.field .lbl{font-size:13px;font-weight:600;color:var(--ink-2)}
+.field input,.field select,.field textarea{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-height:40px;width:100%}
+.field textarea{min-height:70px;resize:vertical}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:520px){.row{grid-template-columns:1fr}}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.seg button{border:1px solid var(--line);background:var(--surface-2);border-radius:8px;padding:8px 6px;cursor:pointer;min-height:40px;font-weight:500}
+.seg button[aria-pressed="true"][data-v="urgente"]{background:var(--urg);border-color:var(--urg);color:#fff}
+.seg button[aria-pressed="true"][data-v="prioritario"]{background:var(--pri);border-color:var(--pri);color:#1C1500}
+.seg button[aria-pressed="true"][data-v="importante"]{background:var(--imp);border-color:var(--imp);color:#fff}
+.hint{font-size:13px;color:var(--ink-2);margin:4px 0 0}
+.err{color:var(--urg-ink);font-size:13.5px;min-height:1em;margin:4px 0 0}
+.dlg-f{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;padding-top:14px;border-top:1px solid var(--line)}
+.dlg-f div{display:flex;gap:8px;flex-wrap:wrap}
+
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;max-width:calc(100% - 32px);opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){.toast,.reu summary::before{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Gestor Directivo – LIVA</h1>
+      <p class="hoy" id="hoy"></p>
+    </div>
+    <div class="controls">
+      <select id="fDir" aria-label="Filtrar por dirección"></select>
+      <label class="toggle"><input type="checkbox" id="fHechas"> Ver cerradas</label>
+    </div>
+  </header>
+
+  <div id="aviso" class="aviso" hidden></div>
+
+  <nav class="tabs" role="tablist" aria-label="Secciones">
+    <button class="tab" role="tab" id="tab-act" aria-controls="pan-act" data-tab="actividades">Actividades <span class="n" id="nAct">0</span></button>
+    <button class="tab" role="tab" id="tab-pag" aria-controls="pan-pag" data-tab="pagos" hidden>Pagos <span class="n" id="nPag">0</span></button>
+    <button class="tab" role="tab" id="tab-conf" aria-controls="pan-conf" data-tab="confirmar" hidden>Por confirmar <span class="n alerta" id="nConf">0</span></button>
+  </nav>
+
+  <section id="pan-act" role="tabpanel" aria-labelledby="tab-act">
+    <div class="bar">
+      <ul class="resumen" id="resAct" aria-live="polite"></ul>
+      <button class="btn primary" data-act="new" data-modo="actividad" data-cat="urgente" data-escribe>Nueva actividad</button>
+    </div>
+    <div class="board" id="board"></div>
+  </section>
+
+  <section id="pan-pag" role="tabpanel" aria-labelledby="tab-pag" hidden>
+    <div class="bar">
+      <ul class="resumen" id="resPag" aria-live="polite"></ul>
+      <button class="btn primary" data-act="new" data-modo="pago" data-escribe>Nuevo pago</button>
+    </div>
+    <div class="board" id="boardPag"></div>
+  </section>
+
+  <section id="pan-conf" role="tabpanel" aria-labelledby="tab-conf" hidden>
+    <div id="inbox"></div>
+  </section>
+</div>
+
+<dialog id="dlg" aria-labelledby="dlgTitle">
+  <div class="dlg">
+    <h2 id="dlgTitle">Nueva actividad</h2>
+    <div class="field">
+      <label for="iTitulo" id="lTitulo">Qué hay que hacer</label>
+      <input id="iTitulo" maxlength="160" autocomplete="off">
+    </div>
+    <div class="field" id="wCat">
+      <span class="lbl" id="lCat">Categoría</span>
+      <div class="seg" id="iCat" role="group" aria-labelledby="lCat">
+        <button type="button" data-v="urgente">Urgente</button>
+        <button type="button" data-v="prioritario">Prioritario</button>
+        <button type="button" data-v="importante">Importante</button>
+      </div>
+      <p class="hint" id="catHint"></p>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="iDir">Dirección</label>
+        <select id="iDir"></select>
+      </div>
+      <div class="field">
+        <label for="iFecha" id="lFecha">Fecha límite</label>
+        <input id="iFecha" type="date">
+      </div>
+    </div>
+    <div class="row" id="wPago">
+      <div class="field">
+        <label for="iMonto">Valor</label>
+        <input id="iMonto" inputmode="numeric" placeholder="$ 0">
+      </div>
+      <div class="field">
+        <label for="iRec">Se repite</label>
+        <select id="iRec"><option value="no">No, pago único</option><option value="mensual">Cada mes</option></select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="iOrigen">Origen</label>
+      <input id="iOrigen" maxlength="80" placeholder="Ej.: comité, daily, WhatsApp">
+    </div>
+    <div class="field">
+      <label for="iNotas">Notas</label>
+      <textarea id="iNotas" maxlength="1000"></textarea>
+    </div>
+    <p class="err" id="dlgErr" role="alert"></p>
+    <div class="dlg-f">
+      <div>
+        <button class="btn danger" id="bEliminar" type="button" hidden>Eliminar</button>
+        <button class="btn quiet" id="bDescartar" type="button" hidden>Descartar</button>
+      </div>
+      <div>
+        <button class="btn" id="bCancelar" type="button">Cerrar</button>
+        <button class="btn primary" id="bGuardar" type="button">Guardar</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const CATS = {
+  urgente:     { nombre:"Urgente",     regla:"Mismo día, máximo 2 días",              ayuda:"Lo resuelves hoy o, a más tardar, en 2 días." },
+  prioritario: { nombre:"Prioritario", regla:"Se gestiona con el equipo, 3 a 5 días", ayuda:"Lo trabajas junto con un área y haces seguimiento en la daily o el comité." },
+  importante:  { nombre:"Importante",  regla:"Se delega, 3 a 5 días",                 ayuda:"Lo entregas a un área y verificas que cierre en 3 a 5 días." }
+};
+const ORDEN = ["urgente","prioritario","importante"];
+const TODOS = "Todos";
+const INTERNAS = ["Dirección General","Dirección Comercial","Dirección Tecnológica","Dirección Jurídica"];
+const EXTERNAS = ["Dirección FIVA (Datos)","Dirección SEMAFORA (Trafficker)"];
+const DIRS = [TODOS].concat(INTERNAS, EXTERNAS);
+const DIR_ANTES = {
+  "General":"Dirección General","Legal":"Dirección Jurídica","Jurídico":"Dirección Jurídica",
+  "Programación":"Dirección Tecnológica","Tecnológico":"Dirección Tecnológica",
+  "Estratégica":"Dirección Comercial","Comercial":"Dirección Comercial",
+  "SEMAFORA":"Dirección SEMAFORA (Trafficker)","SEMAFORA (Trafficker)":"Dirección SEMAFORA (Trafficker)",
+  "FIVA (Datos)":"Dirección FIVA (Datos)"
+};
+const ESCALA_DIAS = 2;
+
+let db = null, localMode = false;
+const cargado = { act:false, pag:false };
+let acts = [], pagos = [];
+const perm = { owner:false, write:true };
+const ui = { tab:"actividades", dir:"todas", verHechas:false, editId:null, modo:"actividad", cat:"urgente" };
+try{ const d = localStorage.getItem("mg-dir"); if(d) ui.dir = d; }catch(e){}
+const $ = s => document.querySelector(s);
+
+/* Utilidades */
+function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function iso(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function dias(f){
+  if(!f) return null;
+  const [y,m,d] = f.split("-").map(Number);
+  const t = new Date(y, m-1, d); const h = new Date(); h.setHours(0,0,0,0);
+  return Math.round((t - h) / 86400000);
+}
+function fechaCorta(f){ const [y,m,d] = f.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString("es-CO",{ weekday:"short", day:"numeric", month:"short" }); }
+function fechaTxt(f){
+  const n = dias(f); if(n === null) return "";
+  if(n < -1) return `Venció hace ${-n} días`;
+  if(n === -1) return "Venció ayer";
+  if(n === 0) return "Vence hoy";
+  if(n === 1) return "Vence mañana";
+  if(n < 7) return `Vence en ${n} días`;
+  return "Vence " + fechaCorta(f);
+}
+function num(v){ return Number(String(v || "").replace(/[^\d]/g, "")) || 0; }
+function pesos(n){ return "$ " + Number(n || 0).toLocaleString("es-CO"); }
+function sumarMes(f){
+  const [y,m,d] = f.split("-").map(Number);
+  const ult = new Date(y, m+1, 0).getDate();
+  return iso(new Date(y, m, Math.min(d, ult)));
+}
+function toast(msg){ const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), 3400); }
+function normDir(d){ return DIR_ANTES[d] || d || "Dirección General"; }
+const cerrada = t => t.estado === "hecha" || t.estado === "pagado";
+const abierta = t => !t.propuesta && !cerrada(t) && t.estado !== "descartada";
+function pasaFiltro(t){ return ui.dir === "todas" || t.direccion === ui.dir || t.direccion === TODOS; }
+function porFecha(a, b){
+  const fa = a.fecha || "9999-12-31", fb = b.fecha || "9999-12-31";
+  return fa === fb ? String(a.creada || "").localeCompare(String(b.creada || "")) : fa.localeCompare(fb);
+}
+function columnaDe(t){
+  if(cerrada(t)) return t.categoria;
+  const n = dias(t.fecha);
+  if(t.categoria !== "urgente" && n !== null && n <= ESCALA_DIAS) return "urgente";
+  return t.categoria;
+}
+const CHECK = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 6.5l2.5 2.5L10 3.5"/></svg>`;
+
+/* Render general */
+function propuestas(){
+  return acts.filter(t => t.propuesta && t.estado !== "descartada").map(t => ({ ...t, _modo:"actividad" }))
+    .concat(pagos.filter(t => t.propuesta && t.estado !== "descartada").map(t => ({ ...t, _modo:"pago" })));
+}
+function render(){
+  $("#hoy").textContent = new Date().toLocaleDateString("es-CO",{ weekday:"long", day:"numeric", month:"long", year:"numeric" }).replace(/^./, c => c.toUpperCase());
+  $("#tab-pag").hidden = !perm.owner;
+  $("#tab-conf").hidden = !perm.owner;
+  if(!perm.owner) ui.tab = "actividades";
+  document.querySelectorAll(".tab").forEach(t => {
+    const sel = t.dataset.tab === ui.tab;
+    t.setAttribute("aria-selected", String(sel)); t.tabIndex = sel ? 0 : -1;
+  });
+  $("#pan-act").hidden = ui.tab !== "actividades";
+  $("#pan-pag").hidden = ui.tab !== "pagos";
+  $("#pan-conf").hidden = ui.tab !== "confirmar";
+  $("#nAct").textContent = acts.filter(t => abierta(t) && pasaFiltro(t)).length;
+  $("#nPag").textContent = pagos.filter(p => abierta(p) && pasaFiltro(p)).length;
+  const nc = propuestas().length;
+  $("#nConf").textContent = nc;
+  if(nc) $("#nConf").removeAttribute("data-cero"); else $("#nConf").setAttribute("data-cero","");
+  document.querySelectorAll("[data-escribe]").forEach(b => b.hidden = !perm.write);
+  if(ui.tab === "actividades") renderAct();
+  else if(ui.tab === "pagos") renderPag();
+  else renderConf();
+}
+
+/* Por confirmar: todas las reuniones, actividades y pagos */
+function renderConf(){
+  const ps = propuestas();
+  if(!ps.length){
+    $("#inbox").innerHTML = `<div class="inbox-vacio"><p><strong>No hay nada por confirmar.</strong></p><p>Cuando me pidas procesar una reunión, sus actividades y pagos aparecerán aquí, agrupados por reunión.</p></div>`;
+    return;
+  }
+  const grupos = new Map();
+  ps.forEach(t => { const k = t.origen || "Sin reunión de origen"; if(!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(t); });
+  const orden = [...grupos].sort((a, b) => {
+    const ma = a[1].reduce((m, t) => t.creada > m ? t.creada : m, ""), mb = b[1].reduce((m, t) => t.creada > m ? t.creada : m, "");
+    return mb.localeCompare(ma);
+  });
+  $("#inbox").innerHTML = `<section class="inbox" aria-label="Por confirmar">
+    <div class="inbox-h">
+      <h2>Por confirmar (${ps.length})</h2>
+      <p>Lo que extraigo cada semana de las notas de Gemini. Tu equipo no lo ve hasta que lo confirmes.</p>
+    </div>
+    ${orden.map(([org, list], i) => {
+      list.sort((a, b) => ORDEN.indexOf(a.categoria) - ORDEN.indexOf(b.categoria) || porFecha(a, b));
+      const nP = list.filter(t => t._modo === "pago").length, nA = list.length - nP;
+      const partes = [nA ? `${nA} ${nA > 1 ? "actividades" : "actividad"}` : "", nP ? `${nP} ${nP > 1 ? "pagos" : "pago"}` : ""].filter(Boolean).join(" y ");
+      return `<details class="reu" ${i === 0 ? "open" : ""}>
+        <summary>
+          <span class="reu-t">${esc(org)}</span>
+          <span class="reu-n">${partes}</span>
+          <span class="reu-dots" aria-hidden="true">${list.map(t => `<span class="dot ${t.categoria || "importante"}"></span>`).join("")}</span>
+        </summary>
+        <div class="reu-list">
+          ${list.map(t => `
+            <div class="pr" data-cat="${t.categoria || ""}">
+              <div>
+                <h3>${esc(t.titulo)}</h3>
+                <p class="meta">
+                  <span class="chip ${t.categoria}">${CATS[t.categoria]?.nombre || "Sin categoría"}</span>
+                  <span class="tipo">${t._modo === "pago" ? "Pago" : "Actividad"}</span>
+                  ${t._modo === "pago" && t.monto ? `<span class="monto">${pesos(num(t.monto))}</span>` : ""}
+                  <span>${esc(t.direccion)}</span>
+                  <span>${t.fecha ? fechaTxt(t.fecha) : "Sin fecha"}</span>
+                </p>
+                ${t.notas ? `<p class="pr-nota">${esc(t.notas)}</p>` : ""}
+              </div>
+              <div class="pr-acts">
+                <button class="btn sm primary" data-act="confirmar" data-modo="${t._modo}" data-id="${t.id}">Confirmar</button>
+                <button class="btn sm" data-act="edit" data-modo="${t._modo}" data-id="${t.id}">Revisar</button>
+                <button class="btn sm quiet" data-act="descartar" data-modo="${t._modo}" data-id="${t.id}">Descartar</button>
+              </div>
+            </div>`).join("")}
+        </div>
+        ${list.length > 1 ? `<div class="reu-f"><button class="btn sm" data-act="confirmarTodas" data-origen="${esc(org)}">Confirmar todas las de esta reunión</button></div>` : ""}
+      </details>`;
+    }).join("")}
+  </section>`;
+}
+
+/* Tablero de tres columnas (actividades y pagos) */
+function tablero(modo){
+  const pago = modo === "pago";
+  const cargo = pago ? cargado.pag : cargado.act;
+  const vis = lista(modo).filter(t => !t.propuesta && t.estado !== "descartada" && pasaFiltro(t) && (ui.verHechas || !cerrada(t)));
+  return ORDEN.map(cat => {
+    const c = CATS[cat];
+    const items = vis.filter(t => columnaDe(t) === cat).sort((a,b) => cerrada(a) - cerrada(b) || porFecha(a,b));
+    const abiertos = items.filter(t => !cerrada(t));
+    let cuerpo;
+    if(!cargo) cuerpo = `<p class="empty">Cargando…</p>`;
+    else if(!items.length) cuerpo = `<p class="empty">${pago ? (cat === "urgente" ? "Ningún pago para hoy ni los próximos 2 días." : "Sin pagos en esta categoría.") : cat === "urgente" ? "Nada para hoy. Revisa lo que viene en Prioritario." : cat === "prioritario" ? "Nada en gestión con el equipo." : "Nada delegado por ahora."}</p>`;
+    else if(ui.dir === "todas"){
+      const otras = [...new Set(items.map(t => t.direccion).filter(d => !DIRS.includes(d)))];
+      cuerpo = DIRS.concat(otras).map(d => {
+        const g = items.filter(t => t.direccion === d);
+        return g.length ? `<p class="sub">${esc(d)} (${g.filter(t => !cerrada(t)).length})</p><div class="list">${g.map(t => tarjeta(t, modo)).join("")}</div>` : "";
+      }).join("");
+    } else cuerpo = `<div class="list">${items.map(t => tarjeta(t, modo)).join("")}</div>`;
+    return `<section class="col" data-cat="${cat}" aria-labelledby="h-${modo}-${cat}">
+      <header class="col-h">
+        <div>
+          <h2 class="cat" id="h-${modo}-${cat}">${c.nombre}<span class="n">${abiertos.length}</span></h2>
+          <p class="regla">${c.regla}</p>
+          ${pago ? `<p class="col-total">${pesos(abiertos.reduce((s, p) => s + num(p.monto), 0))}</p>` : `<p class="help">${c.ayuda}</p>`}
+        </div>
+        ${perm.write ? `<button class="add" data-act="new" data-modo="${modo}" data-cat="${cat}" aria-label="Añadir ${pago ? "pago" : "actividad"} a ${c.nombre}">+</button>` : ""}
+      </header>
+      <div class="col-b">${cuerpo}</div>
+    </section>`;
+  }).join("");
+}
+function tarjeta(t, modo){
+  const pago = modo === "pago";
+  const n = dias(t.fecha);
+  const escalada = !cerrada(t) && columnaDe(t) !== t.categoria;
+  const fCls = n === null ? "" : n < 0 ? "tarde" : n <= ESCALA_DIAS ? "pronto" : "";
+  const accion = pago ? (cerrada(t) ? "Marcar como pendiente" : "Marcar como pagado") : (cerrada(t) ? "Reabrir" : "Marcar como hecha");
+  return `<article class="card ${cerrada(t) ? "hecha" : ""} ${escalada ? "escalada" : ""}">
+    <button class="check" data-act="toggle" data-modo="${modo}" data-id="${t.id}" ${perm.write ? "" : "disabled"} aria-label="${accion}: ${esc(t.titulo)}">${CHECK}</button>
+    <button class="body" data-act="edit" data-modo="${modo}" data-id="${t.id}">
+      <h3>${esc(t.titulo)}</h3>
+      <p class="meta">
+        ${pago ? `<span class="monto">${t.monto ? pesos(num(t.monto)) : "Sin valor"}</span>` : ""}
+        ${t.direccion === TODOS ? `<span class="tag todos">Todos</span>` : ui.dir === "todas" ? `<span>${esc(t.direccion)}</span>` : ""}
+        ${pago && cerrada(t) ? `<span>Pagado ${t.pagado ? new Date(t.pagado).toLocaleDateString("es-CO",{day:"numeric",month:"short"}) : ""}</span>` : t.fecha ? `<span class="fecha ${fCls}">${fechaTxt(t.fecha)}</span>` : ""}
+        ${pago && t.recurrente === "mensual" ? `<span class="tag">Cada mes</span>` : ""}
+      </p>
+      ${escalada ? `<p class="origen">Escaló por fecha desde ${CATS[t.categoria].nombre}</p>` : ""}
+    </button>
+  </article>`;
+}
+
+/* Actividades */
+function renderAct(){
+  const abiertas = acts.filter(t => abierta(t) && pasaFiltro(t));
+  const vencidas = abiertas.filter(t => { const n = dias(t.fecha); return n !== null && n < 0; }).length;
+  const deleg = abiertas.filter(t => t.direccion !== "Dirección General").length;
+  const pct = abiertas.length ? Math.round(deleg / abiertas.length * 100) : 0;
+  const semana = Date.now() - 7 * 86400000;
+  const hechas = acts.filter(t => t.estado === "hecha" && pasaFiltro(t) && t.completada && Date.parse(t.completada) >= semana).length;
+  $("#resAct").innerHTML = !cargado.act ? "<li>Cargando…</li>" : `
+    <li><strong>${abiertas.length}</strong>abiertas</li>
+    <li class="${vencidas ? "rojo" : ""}"><strong>${vencidas}</strong>vencidas</li>
+    <li><strong>${pct}%</strong>en manos de un área</li>
+    <li><strong>${hechas}</strong>cerradas en 7 días</li>`;
+
+  $("#board").innerHTML = tablero("actividad");
+}
+
+/* Pagos */
+function renderPag(){
+  const abiertos = pagos.filter(p => abierta(p) && pasaFiltro(p));
+  const venc = abiertos.filter(p => p.fecha && dias(p.fecha) < 0);
+  const mes = abiertos.filter(p => p.fecha && dias(p.fecha) >= 0 && dias(p.fecha) <= 30);
+  const hoy = new Date(); const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).getTime();
+  const pagadosMes = pagos.filter(p => p.estado === "pagado" && pasaFiltro(p) && p.pagado && Date.parse(p.pagado) >= inicioMes);
+  const suma = l => l.reduce((s, p) => s + num(p.monto), 0);
+  $("#resPag").innerHTML = !cargado.pag ? "<li>Cargando…</li>" : `
+    <li class="${venc.length ? "rojo" : ""}"><strong>${pesos(suma(venc))}</strong>vencido (${venc.length})</li>
+    <li><strong>${pesos(suma(mes))}</strong>por pagar en 30 días</li>
+    <li><strong>${pesos(suma(pagadosMes))}</strong>pagado este mes</li>`;
+  $("#boardPag").innerHTML = tablero("pago");
+}
+
+/* Datos */
+const COL = { actividad:"tareas", pago:"pagos" };
+const lista = modo => modo === "pago" ? pagos : acts;
+async function crear(modo, data){
+  if(localMode){ lista(modo).push({ id:"l"+Date.now()+Math.random().toString(36).slice(2,6), ...data }); render(); return; }
+  await db.collection(COL[modo]).add(data);
+}
+async function actualizar(modo, id, data){
+  if(localMode){ Object.assign(lista(modo).find(x => x.id === id), data); render(); return; }
+  await db.doc(COL[modo] + "/" + id).update(data);
+}
+async function eliminar(modo, id){
+  if(localMode){ if(modo === "pago") pagos = pagos.filter(x => x.id !== id); else acts = acts.filter(x => x.id !== id); render(); return; }
+  await db.doc(COL[modo] + "/" + id).delete();
+}
+function fallo(e, accion){
+  const code = e && e.code;
+  if(code === "invalid_argument"){ perm.write = false; render(); toast("Tu acceso a este tablero es de solo lectura."); }
+  else if(code === "quota_exceeded") toast("El tablero llegó a su límite de almacenamiento.");
+  else toast(`No se pudo ${accion}. Intenta de nuevo.`);
+}
+function validar(modo, d){
+  if(!d.titulo) return "Escribe qué hay que hacer.";
+  if(modo === "pago" && !d.fecha) return "Asigna la fecha de pago para que el tablero te avise.";
+  if(d.categoria === "prioritario" && d.direccion === "Dirección General") return "Lo Prioritario se gestiona con el equipo: elige una dirección o Todos.";
+  return "";
+}
+
+/* Diálogo */
+const dlg = $("#dlg");
+function pintarSeg(){
+  document.querySelectorAll("#iCat button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === ui.cat)));
+  $("#catHint").textContent = CATS[ui.cat].regla + ". " + CATS[ui.cat].ayuda;
+}
+function abrir(modo, id, cat){
+  ui.modo = modo;
+  const t = id ? lista(modo).find(x => x.id === id) : null;
+  ui.editId = t ? t.id : null;
+  ui.cat = t ? (t.categoria || "urgente") : (cat || "urgente");
+  const pago = modo === "pago";
+  const editable = perm.write;
+  $("#dlgTitle").textContent = !t ? (pago ? "Nuevo pago" : "Nueva actividad") : t.propuesta ? "Revisar antes de confirmar" : editable ? (pago ? "Editar pago" : "Editar actividad") : "Detalle";
+  $("#lTitulo").textContent = pago ? "Concepto del pago" : "Qué hay que hacer";
+  $("#lFecha").textContent = pago ? "Fecha de pago" : "Fecha límite";
+  $("#wPago").hidden = !pago;
+  $("#iTitulo").value = t?.titulo || "";
+  $("#iDir").value = t?.direccion || "Dirección General";
+  $("#iFecha").value = t?.fecha || "";
+  $("#iMonto").value = t?.monto ? num(t.monto).toLocaleString("es-CO") : "";
+  $("#iRec").value = t?.recurrente || "no";
+  $("#iOrigen").value = t?.origen || "";
+  $("#iNotas").value = t?.notas || "";
+  $("#dlgErr").textContent = "";
+  desarmar();
+  dlg.querySelectorAll("input,select,textarea,#iCat button").forEach(el => el.disabled = !editable);
+  $("#bGuardar").hidden = !editable;
+  $("#bEliminar").hidden = !t || !perm.owner;
+  $("#bDescartar").hidden = !t || !perm.owner || t.estado === "descartada";
+  $("#bGuardar").textContent = t?.propuesta ? "Confirmar" : "Guardar";
+  pintarSeg();
+  dlg.showModal();
+  if(editable) setTimeout(() => $("#iTitulo").focus(), 30);
+}
+async function guardar(){
+  const modo = ui.modo;
+  const data = {
+    titulo: $("#iTitulo").value.trim(),
+    direccion: $("#iDir").value,
+    fecha: $("#iFecha").value,
+    origen: $("#iOrigen").value.trim(),
+    notas: $("#iNotas").value.trim(),
+    propuesta: false
+  };
+  data.categoria = ui.cat;
+  if(modo === "pago"){ data.monto = String(num($("#iMonto").value) || ""); data.recurrente = $("#iRec").value; }
+  const err = validar(modo, data);
+  if(err){ $("#dlgErr").textContent = err; return; }
+  const btn = $("#bGuardar"); btn.disabled = true;
+  try{
+    if(ui.editId){
+      const t = lista(modo).find(x => x.id === ui.editId);
+      await actualizar(modo, ui.editId, data);
+      toast(t?.propuesta ? "Confirmado" : "Cambios guardados");
+    } else {
+      await crear(modo, { ...data, estado:"pendiente", creada:new Date().toISOString(), completada:null, pagado:null });
+      toast(modo === "pago" ? "Pago registrado" : "Actividad guardada");
+    }
+    dlg.close();
+  } catch(e){ fallo(e, "guardar"); }
+  finally{ btn.disabled = false; }
+}
+
+async function alternar(modo, t){
+  if(modo === "actividad"){
+    const hecha = t.estado !== "hecha";
+    await actualizar(modo, t.id, { estado: hecha ? "hecha" : "pendiente", completada: hecha ? new Date().toISOString() : null });
+    toast(hecha ? "Marcada como hecha" : "Reabierta");
+    return;
+  }
+  const pagar = t.estado !== "pagado";
+  await actualizar(modo, t.id, { estado: pagar ? "pagado" : "pendiente", pagado: pagar ? new Date().toISOString() : null });
+  if(pagar && t.recurrente === "mensual" && t.fecha && !t.siguienteCreado){
+    await crear("pago", { titulo:t.titulo, categoria:t.categoria || "importante", direccion:t.direccion, fecha:sumarMes(t.fecha), monto:t.monto || "", recurrente:"mensual", origen:t.origen || "", notas:t.notas || "", propuesta:false, estado:"pendiente", creada:new Date().toISOString(), pagado:null });
+    await actualizar(modo, t.id, { siguienteCreado:true });
+    toast("Pagado. Quedó programado el del próximo mes.");
+  } else toast(pagar ? "Marcado como pagado" : "Marcado como pendiente");
+}
+
+document.addEventListener("click", async ev => {
+  const b = ev.target.closest("[data-act]"); if(!b) return;
+  const { act, id, modo } = b.dataset;
+  if(act === "new") return abrir(modo, null, b.dataset.cat);
+  if(act === "edit") return abrir(modo, id);
+  try{
+    if(act === "confirmarTodas"){
+      const list = propuestas().filter(t => (t.origen || "Sin reunión de origen") === b.dataset.origen);
+      let ok = 0, pend = 0;
+      for(const t of list){
+        if(validar(t._modo, t)){ pend++; continue; }
+        await actualizar(t._modo, t.id, { propuesta:false, estado:"pendiente" }); ok++;
+      }
+      toast(pend ? `Confirmé ${ok}. ${pend} necesita${pend > 1 ? "n" : ""} revisión antes de entrar.` : `Confirmé ${ok}.`);
+      return;
+    }
+    const t = lista(modo).find(x => x.id === id); if(!t) return;
+    if(act === "toggle") return await alternar(modo, t);
+    if(act === "confirmar"){
+      if(validar(modo, t)) return abrir(modo, id);
+      await actualizar(modo, id, { propuesta:false, estado:"pendiente" }); toast("Confirmado");
+    }
+    if(act === "descartar"){ await actualizar(modo, id, { estado:"descartada" }); toast("Descartado"); }
+  } catch(e){ fallo(e, "actualizar"); }
+});
+document.querySelectorAll("#iCat button").forEach(b => b.addEventListener("click", () => { ui.cat = b.dataset.v; pintarSeg(); }));
+$("#bCancelar").addEventListener("click", () => dlg.close());
+$("#bGuardar").addEventListener("click", guardar);
+$("#bDescartar").addEventListener("click", async () => { try{ await actualizar(ui.modo, ui.editId, { estado:"descartada" }); toast("Descartado"); dlg.close(); } catch(e){ fallo(e, "descartar"); } });
+let armado = false;
+function desarmar(){ armado = false; const b = $("#bEliminar"); b.textContent = "Eliminar"; b.classList.remove("confirmando"); }
+$("#bEliminar").addEventListener("click", async () => {
+  const b = $("#bEliminar");
+  if(!armado){
+    armado = true; b.textContent = "Confirmar eliminación"; b.classList.add("confirmando");
+    $("#dlgErr").textContent = "Esta acción no se puede deshacer. Pulsa de nuevo para eliminar.";
+    return;
+  }
+  b.disabled = true;
+  try{ await eliminar(ui.modo, ui.editId); toast("Eliminado"); dlg.close(); }
+  catch(e){ fallo(e, "eliminar"); }
+  finally{ b.disabled = false; desarmar(); }
+});
+dlg.addEventListener("close", desarmar);
+dlg.addEventListener("keydown", e => { if(e.key === "Enter" && (e.metaKey || e.ctrlKey)) guardar(); });
+$("#iMonto").addEventListener("input", e => { const n = num(e.target.value); e.target.value = n ? n.toLocaleString("es-CO") : ""; });
+document.addEventListener("keydown", e => {
+  if(e.key !== "n" || dlg.open || e.metaKey || e.ctrlKey || e.altKey || !perm.write) return;
+  if(/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) return;
+  e.preventDefault(); abrir(ui.tab === "pagos" ? "pago" : "actividad", null, "urgente");
+});
+
+/* Pestañas y filtros */
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => { ui.tab = t.dataset.tab; render(); }));
+$(".tabs").addEventListener("keydown", e => {
+  if(e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+  const vis = [...document.querySelectorAll(".tab")].filter(t => !t.hidden);
+  const i = vis.findIndex(t => t.dataset.tab === ui.tab);
+  const n = vis[(i + (e.key === "ArrowRight" ? 1 : -1) + vis.length) % vis.length];
+  ui.tab = n.dataset.tab; render(); n.focus();
+});
+const grupos = `<option value="${TODOS}">Todos (equipo completo)</option><optgroup label="Internas">${INTERNAS.map(d => `<option>${d}</option>`).join("")}</optgroup><optgroup label="Externas">${EXTERNAS.map(d => `<option>${d}</option>`).join("")}</optgroup>`;
+$("#fDir").innerHTML = `<option value="todas">Ver todo el tablero</option>` + grupos;
+$("#iDir").innerHTML = grupos;
+if(![...$("#fDir").options].some(o => o.value === ui.dir)) ui.dir = "todas";
+$("#fDir").value = ui.dir;
+$("#fDir").addEventListener("change", e => { ui.dir = e.target.value; try{ localStorage.setItem("mg-dir", ui.dir); }catch(err){} render(); });
+$("#fHechas").addEventListener("change", e => { ui.verHechas = e.target.checked; render(); });
+
+/* Arranque */
+render();
+(async () => {
+  let d = null, u = null;
+  const c = window.claude;
+  try{ d = c && c.use ? await c.use("db") : null; } catch(e){ d = null; }
+  try{ u = c && c.use ? await c.use("user") : null; } catch(e){ u = null; }
+  if(!d){
+    localMode = true; perm.owner = true; cargado.act = cargado.pag = true;
+    const a = $("#aviso"); a.hidden = false;
+    a.textContent = "Esta vista no guarda cambios. Abre el tablero desde su enlace publicado para que la información se conserve.";
+    render(); return;
+  }
+  db = d;
+  if(u){
+    perm.owner = await u.isOwner();
+    const w = await u.can("data.write");
+    perm.write = w === null ? true : w;
+  }
+  render();
+  const err = e => toast(e && e.code === "revoked" ? "Ya no tienes acceso a este tablero." : "Se perdió la conexión. Recarga la página.");
+  db.collection("tareas").onSnapshot(snap => {
+    acts = snap.docs.map(x => ({ id:x.id, ...x.data() })).filter(t => t.tipo !== "pago").map(t => ({ ...t, direccion: normDir(t.direccion) }));
+    cargado.act = true; render();
+  }, e => { cargado.act = true; render(); err(e); });
+  if(perm.owner){
+    db.collection("pagos").onSnapshot(snap => {
+      pagos = snap.docs.map(x => ({ id:x.id, ...x.data() })).map(p => ({ ...p, categoria: p.categoria || "importante", direccion: normDir(p.direccion) }));
+      cargado.pag = true; render();
+    }, e => { cargado.pag = true; render(); err(e); });
+  }
+})();
+setInterval(() => render(), 60 * 60 * 1000);
+</script>
+</body>
+</html>
