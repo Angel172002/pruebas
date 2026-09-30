@@ -42,29 +42,30 @@ export function normalizarImport(body) {
   return { filas, rechazos };
 }
 
-export function importar(db, filas) {
-  const ins = db.prepare(`INSERT INTO tasks(id,tipo,titulo,categoria,area,responsable,fecha_limite,estado,cerrada_at,origen,notas,monto,serie_id,periodo,created_at,updated_at)
-    VALUES (@id,@tipo,@titulo,@categoria,@area,@responsable,@fecha_limite,@estado,@cerrada_at,@origen,@notas,@monto,@serie,@periodo,@created_at,@created_at)
-    ON CONFLICT(id) DO NOTHING`);
+export async function importar(db, filas) {
   let nuevas = 0;
-  db.transaction(() => {
+  await db.tx(async x => {
     for (const f of filas) {
       let serie = null;
       if (f.recurrente === 'mensual' && f.fecha_limite && f.estado !== 'descartada') {
         serie = randomUUID();
-        db.prepare('INSERT INTO series(id, frecuencia, dia_ancla) VALUES (?,?,?)').run(serie, 'mensual', Number(f.fecha_limite.slice(8)));
+        await x.run('INSERT INTO series(id, frecuencia, dia_ancla) VALUES (?,?,?)', [serie, 'mensual', Number(f.fecha_limite.slice(8))]);
       }
-      const r = ins.run({ ...f, serie, periodo: serie ? f.fecha_limite.slice(0, 7) : null });
-      if (r.changes) nuevas++; else if (serie) db.prepare('DELETE FROM series WHERE id = ?').run(serie);
+      const r = await x.run(`INSERT INTO tasks(id,tipo,titulo,categoria,area,responsable,fecha_limite,estado,cerrada_at,origen,notas,monto,serie_id,periodo,created_at,updated_at)
+        VALUES (@id,@tipo,@titulo,@categoria,@area,@responsable,@fecha_limite,@estado,@cerrada_at,@origen,@notas,@monto,@serie,@periodo,@created_at,@created_at)
+        ON CONFLICT(id) DO NOTHING`,
+        { id: f.id, tipo: f.tipo, titulo: f.titulo, categoria: f.categoria, area: f.area, responsable: f.responsable, fecha_limite: f.fecha_limite,
+          estado: f.estado, cerrada_at: f.cerrada_at, origen: f.origen, notas: f.notas, monto: f.monto, serie, periodo: serie ? f.fecha_limite.slice(0, 7) : null, created_at: f.created_at });
+      if (r.changes) nuevas++; else if (serie) await x.run('DELETE FROM series WHERE id = ?', [serie]);
     }
-  })();
+  });
   return { nuevas, existentes: filas.length - nuevas };
 }
 
-export function exportar(db) {
+export async function exportar(db) {
   return { schemaVersion: 1, exportedAt: new Date().toISOString(),
-    tasks: db.prepare('SELECT * FROM tasks ORDER BY created_at').all().map(({ version, updated_at, ...t }) => t),
-    links: db.prepare('SELECT * FROM github_links').all() };
+    tasks: (await db.all('SELECT * FROM tasks ORDER BY created_at')).map(({ version, updated_at, ...t }) => t),
+    links: await db.all('SELECT * FROM github_links') };
 }
 
 const celda = v => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };

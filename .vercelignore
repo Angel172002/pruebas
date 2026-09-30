@@ -1,0 +1,8 @@
+legacy
+test
+data
+backups
+.github
+Dockerfile
+render.yaml
+*.md

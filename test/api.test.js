@@ -1,11 +1,14 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { loadConfig } from '../src/config.js';
 import { openDb } from '../src/db.js';
 import { crearApp } from '../src/app.js';
 import { diasHasta, escalamiento, sumarMes } from '../src/domain.js';
 
-let server, base, db, ghCalls;
+let server, base, db, ghCalls, dir;
 const cookies = {};
 const fakeFetch = async (url, init = {}) => {
   ghCalls.push({ url, init });
@@ -17,8 +20,9 @@ const fakeFetch = async (url, init = {}) => {
 
 before(async () => {
   ghCalls = [];
-  const cfg = loadConfig({ OWNER_TOKEN: 'owner-secret-123', EDITOR_TOKEN: 'editor-secret-123', VIEWER_TOKEN: 'viewer-secret-1', GITHUB_TOKEN: 'ghp_x', GITHUB_REPOS: 'o/r' });
-  db = openDb(':memory:');
+  const cfg = loadConfig({ OWNER_TOKEN: 'owner-secret-123', SESSION_SECRET: 'test-session-secret-123', EDITOR_TOKEN: 'editor-secret-123', VIEWER_TOKEN: 'viewer-secret-1', GITHUB_TOKEN: 'ghp_x', GITHUB_REPOS: 'o/r' });
+  dir = mkdtempSync(join(tmpdir(), 'liva-'));
+  db = await openDb({ url: `file:${join(dir, 'test.db')}` });
   server = crearApp({ cfg, db, fetchImpl: fakeFetch }).listen(0);
   base = `http://127.0.0.1:${server.address().port}`;
   for (const [rol, token] of [['owner', 'owner-secret-123'], ['editor', 'editor-secret-123'], ['viewer', 'viewer-secret-1']]) {
@@ -26,7 +30,7 @@ before(async () => {
     cookies[rol] = r.headers.get('set-cookie').split(';')[0];
   }
 });
-after(() => { server.close(); db.close(); });
+after(() => { server.close(); db.close(); rmSync(dir, { recursive: true, force: true }); });
 
 const req = (rol, method, path, body) => fetch(base + path, {
   method, headers: { 'content-type': 'application/json', 'x-requested-with': 'liva', ...(rol ? { cookie: cookies[rol] } : {}) },
@@ -157,6 +161,15 @@ test('GitHub: lista permitida, crear issue, vincular, refrescar y token nunca al
 test('eliminar deja rastro en la auditoría', async () => {
   const { task } = await (await req('owner', 'POST', '/api/tasks', act({ titulo: 'Borrable' }))).json();
   assert.equal((await req('owner', 'DELETE', `/api/tasks/${task.id}`)).status, 204);
-  const fila = db.prepare("SELECT accion, detalle FROM task_events WHERE task_id = ? ORDER BY id DESC").get(task.id);
+  const fila = await db.get('SELECT accion, detalle FROM task_events WHERE task_id = ? ORDER BY id DESC', [task.id]);
   assert.equal(fila.accion, 'eliminar');
+});
+
+test('migraciones idempotentes y producción exige secretos', async () => {
+  const { openDb: abrir } = await import('../src/db.js');
+  const d2 = await abrir({ url: `file:${join(dir, 'test.db')}` }); // reabrir no re-ejecuta migraciones
+  assert.equal((await d2.all('SELECT name FROM schema_migrations')).length, 1);
+  d2.close();
+  assert.throws(() => loadConfig({ NODE_ENV: 'production', OWNER_TOKEN: 'x'.repeat(12) }), /SESSION_SECRET/);
+  assert.throws(() => loadConfig({ NODE_ENV: 'production', SESSION_SECRET: 'x'.repeat(16) }), /OWNER_TOKEN/);
 });

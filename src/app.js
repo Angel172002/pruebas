@@ -1,5 +1,5 @@
 import express from 'express';
-import { readdirSync, statSync, unlinkSync } from 'node:fs';
+import { mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -29,7 +29,7 @@ export function crearApp({ cfg, db, fetchImpl }) {
     next();
   });
   app.get('/healthz', (_req, res) => res.json({ ok: true }));
-  app.get('/readyz', (_req, res) => { try { db.prepare('SELECT 1').get(); res.json({ ok: true }); } catch { res.status(503).json({ ok: false }); } });
+  app.get('/readyz', async (_req, res) => { try { await db.get('SELECT 1'); res.json({ ok: true }); } catch { res.status(503).json({ ok: false }); } });
 
   app.use(express.json({ limit: '2mb' }));
   app.use(authMiddleware(cfg), anticsrf);
@@ -49,42 +49,42 @@ export function crearApp({ cfg, db, fetchImpl }) {
   api.use(requiere('viewer'));
   const esOwner = req => req.rol === 'owner';
   const visible = (req, t) => t && (esOwner(req) || (t.tipo === 'actividad' && ['pendiente', 'cerrada'].includes(t.estado)));
-  const cargar = (req, res) => {
-    const t = store.get(req.params.id);
+  const cargar = async (req, res) => {
+    const t = await store.get(req.params.id);
     if (!visible(req, t)) { res.status(404).json({ error: 'No existe.' }); return null; }
     return t;
   };
 
-  api.get('/tasks', (req, res) => res.json({ tasks: store.listar({ incluirPagos: esOwner(req) }) }));
-  api.get('/summary', (req, res) => res.json(store.resumen(esOwner(req))));
-  api.get('/tasks/:id/events', (req, res) => { if (cargar(req, res)) res.json({ events: store.eventos(req.params.id) }); });
+  api.get('/tasks', async (req, res) => res.json({ tasks: await store.listar({ incluirPagos: esOwner(req) }) }));
+  api.get('/summary', async (req, res) => res.json(await store.resumen(esOwner(req))));
+  api.get('/tasks/:id/events', async (req, res) => { if (await cargar(req, res)) res.json({ events: await store.eventos(req.params.id) }); });
 
-  api.post('/tasks', requiere('editor'), (req, res) => {
+  api.post('/tasks', requiere('editor'), async (req, res) => {
     const tipo = req.body?.tipo === 'pago' ? 'pago' : 'actividad';
     if (tipo === 'pago' && !esOwner(req)) return res.status(403).json({ error: 'Solo el owner gestiona pagos.' });
     const { error, valor } = validarTarea(req.body || {}, { tipo });
     if (error) return res.status(422).json({ error });
-    res.status(201).json({ task: store.crear(req.actor, valor, { tipo }) });
+    res.status(201).json({ task: await store.crear(req.actor, valor, { tipo }) });
   });
-  api.patch('/tasks/:id', requiere('editor'), (req, res) => {
-    const t = cargar(req, res); if (!t) return;
+  api.patch('/tasks/:id', requiere('editor'), async (req, res) => {
+    const t = await cargar(req, res); if (!t) return;
     if (t.estado === 'propuesta' && !esOwner(req)) return res.status(403).json({ error: 'Sin permiso.' });
     const { error, valor } = validarTarea(req.body || {}, { tipo: t.tipo, parcial: true });
     if (error) return res.status(422).json({ error });
-    res.json({ task: store.actualizar(req.actor, t.id, valor, Number.isInteger(req.body.version) ? req.body.version : undefined) });
+    res.json({ task: await store.actualizar(req.actor, t.id, valor, Number.isInteger(req.body.version) ? req.body.version : undefined) });
   });
-  api.post('/tasks/:id/transition', requiere('editor'), (req, res) => {
-    const t = cargar(req, res); if (!t) return;
+  api.post('/tasks/:id/transition', requiere('editor'), async (req, res) => {
+    const t = await cargar(req, res); if (!t) return;
     const accion = req.body?.accion;
     if (['descartar', 'restaurar', 'confirmar'].includes(accion) && !esOwner(req)) return res.status(403).json({ error: 'Solo el owner puede hacer esto.' });
-    res.json(store.transicion(req.actor, t.id, accion));
+    res.json(await store.transicion(req.actor, t.id, accion));
   });
-  api.delete('/tasks/:id', requiere('owner'), (req, res) => { store.eliminar(req.actor, req.params.id); res.status(204).end(); });
-  api.post('/meetings/confirm', requiere('owner'), (req, res) => res.json(store.confirmarReunion(req.actor, String(req.body?.origen ?? ''))));
+  api.delete('/tasks/:id', requiere('owner'), async (req, res) => { await store.eliminar(req.actor, req.params.id); res.status(204).end(); });
+  api.post('/meetings/confirm', requiere('owner'), async (req, res) => res.json(await store.confirmarReunion(req.actor, String(req.body?.origen ?? ''))));
 
   // ---- Bandeja: propuestas (solo owner) y su alta manual
-  api.get('/proposals', requiere('owner'), (_req, res) => res.json({ tasks: store.listar({ incluirPagos: true }).filter(t => t.estado === 'propuesta' || t.estado === 'descartada') }));
-  api.post('/proposals', requiere('owner'), (req, res) => {
+  api.get('/proposals', requiere('owner'), async (_req, res) => res.json({ tasks: (await store.listar({ incluirPagos: true })).filter(t => t.estado === 'propuesta' || t.estado === 'descartada') }));
+  api.post('/proposals', requiere('owner'), async (req, res) => {
     const out = [];
     for (const x of Array.isArray(req.body?.items) ? req.body.items.slice(0, 200) : []) {
       const tipo = x.tipo === 'pago' ? 'pago' : 'actividad';
@@ -92,65 +92,65 @@ export function crearApp({ cfg, db, fetchImpl }) {
       if (error) return res.status(422).json({ error: `${x.titulo || '(sin título)'}: ${error}` });
       out.push({ tipo, valor });
     }
-    db.transaction(() => out.forEach(o => store.crear(req.actor, o.valor, { tipo: o.tipo, estado: 'propuesta' })))();
+    for (const o of out) await store.crear(req.actor, o.valor, { tipo: o.tipo, estado: 'propuesta' });
     res.status(201).json({ creadas: out.length });
   });
 
   // ---- Exportar / importar / backup
-  api.get('/export', requiere('owner'), (_req, res) => res.set('Content-Disposition', 'attachment; filename="liva-export.json"').json(exportar(db)));
-  api.get('/export.csv', requiere('owner'), (req, res) => {
+  api.get('/export', requiere('owner'), async (_req, res) => res.set('Content-Disposition', 'attachment; filename="liva-export.json"').json(await exportar(db)));
+  api.get('/export.csv', requiere('owner'), async (req, res) => {
     const tipo = req.query.tipo === 'pago' ? 'pago' : 'actividad';
     res.type('text/csv; charset=utf-8').set('Content-Disposition', `attachment; filename="liva-${tipo}s.csv"`)
-      .send(aCsv(store.listar({ incluirPagos: true }).filter(t => t.tipo === tipo && t.estado !== 'propuesta')));
+      .send(aCsv((await store.listar({ incluirPagos: true })).filter(t => t.tipo === tipo && t.estado !== 'propuesta')));
   });
-  api.post('/import', requiere('owner'), (req, res) => {
+  api.post('/import', requiere('owner'), async (req, res) => {
     const r = normalizarImport(req.body);
     if (r.error) return res.status(422).json({ error: r.error });
     if (req.query.dry === '1') return res.json({ validas: r.filas.length, rechazos: r.rechazos });
-    res.json({ ...importar(db, r.filas), rechazos: r.rechazos });
+    res.json({ ...(await importar(db, r.filas)), rechazos: r.rechazos });
   });
 
   // ---- GitHub
-  const guardarLink = (taskId, l) => db.prepare(`INSERT INTO github_links(task_id,repo,tipo,numero,titulo,url,estado,synced_at) VALUES (?,?,?,?,?,?,?,?)
-    ON CONFLICT(repo,tipo,numero) DO UPDATE SET titulo=excluded.titulo, estado=excluded.estado, synced_at=excluded.synced_at`)
-    .run(taskId, l.repo, l.tipo, l.numero, l.titulo, l.url, l.estado, new Date().toISOString());
-  api.get('/tasks/:id/links', (req, res) => { if (cargar(req, res)) res.json({ links: db.prepare('SELECT * FROM github_links WHERE task_id = ?').all(req.params.id) }); });
-  api.post('/tasks/:id/issue', requiere('editor'), wrap(async (req, res) => {
-    const t = cargar(req, res); if (!t) return;
+  const guardarLink = (taskId, l) => db.run(`INSERT INTO github_links(task_id,repo,tipo,numero,titulo,url,estado,synced_at) VALUES (?,?,?,?,?,?,?,?)
+    ON CONFLICT(repo,tipo,numero) DO UPDATE SET titulo=excluded.titulo, estado=excluded.estado, synced_at=excluded.synced_at`,
+    [taskId, l.repo, l.tipo, l.numero, l.titulo, l.url, l.estado, new Date().toISOString()]);
+  const linksDe = id => db.all('SELECT * FROM github_links WHERE task_id = ?', [id]);
+  api.get('/tasks/:id/links', async (req, res) => { if (await cargar(req, res)) res.json({ links: await linksDe(req.params.id) }); });
+  api.post('/tasks/:id/issue', requiere('editor'), async (req, res) => {
+    const t = await cargar(req, res); if (!t) return;
     if (t.tipo === 'pago') return res.status(422).json({ error: 'Los pagos no se publican en GitHub.' });
     const cuerpo = [t.notas, `\n---\nCategoría: ${t.categoria} · Dirección: ${t.area}${t.fecha_limite ? ' · Fecha límite: ' + t.fecha_limite : ''}`].join('\n').trim();
     const l = await gh.crearIssue(req.body?.repo, { titulo: t.titulo, cuerpo });
-    guardarLink(t.id, l); store.evento(t.id, req.actor, 'github', `Issue ${l.repo}#${l.numero}`);
+    await guardarLink(t.id, l); await store.evento(t.id, req.actor, 'github', `Issue ${l.repo}#${l.numero}`);
     res.status(201).json({ link: l });
-  }));
-  api.post('/tasks/:id/links', requiere('editor'), wrap(async (req, res) => {
-    const t = cargar(req, res); if (!t) return;
+  });
+  api.post('/tasks/:id/links', requiere('editor'), async (req, res) => {
+    const t = await cargar(req, res); if (!t) return;
     const l = await gh.obtener(req.body?.repo, Number(req.body?.numero));
-    guardarLink(t.id, l); store.evento(t.id, req.actor, 'github', `Vinculado ${l.repo}#${l.numero}`);
+    await guardarLink(t.id, l); await store.evento(t.id, req.actor, 'github', `Vinculado ${l.repo}#${l.numero}`);
     res.status(201).json({ link: l });
-  }));
-  api.post('/tasks/:id/links/refresh', requiere('editor'), wrap(async (req, res) => {
-    const t = cargar(req, res); if (!t) return;
-    const links = db.prepare('SELECT * FROM github_links WHERE task_id = ?').all(t.id);
-    for (const l of links) guardarLink(t.id, await gh.obtener(l.repo, l.numero));
-    res.json({ links: db.prepare('SELECT * FROM github_links WHERE task_id = ?').all(t.id) });
-  }));
-  api.delete('/links/:id', requiere('editor'), (req, res) => { db.prepare('DELETE FROM github_links WHERE id = ?').run(Number(req.params.id)); res.status(204).end(); });
-  api.get('/github/issues', requiere('editor'), wrap(async (req, res) => {
+  });
+  api.post('/tasks/:id/links/refresh', requiere('editor'), async (req, res) => {
+    const t = await cargar(req, res); if (!t) return;
+    for (const l of await linksDe(t.id)) await guardarLink(t.id, await gh.obtener(l.repo, l.numero));
+    res.json({ links: await linksDe(t.id) });
+  });
+  api.delete('/links/:id', requiere('editor'), async (req, res) => { await db.run('DELETE FROM github_links WHERE id = ?', [Number(req.params.id)]); res.status(204).end(); });
+  api.get('/github/issues', requiere('editor'), async (req, res) => {
     const lista = await gh.listarAbiertos(req.query.repo);
-    const ya = new Set(db.prepare('SELECT repo, tipo, numero FROM github_links').all().map(l => `${l.repo}/${l.tipo}/${l.numero}`));
+    const ya = new Set((await db.all('SELECT repo, tipo, numero FROM github_links')).map(l => `${l.repo}/${l.tipo}/${l.numero}`));
     res.json({ issues: lista.map(i => ({ ...i, importado: ya.has(`${i.repo}/${i.tipo}/${i.numero}`) })) });
-  }));
-  api.post('/github/import', requiere('owner'), wrap(async (req, res) => {
+  });
+  api.post('/github/import', requiere('owner'), async (req, res) => {
     const lista = (await gh.listarAbiertos(req.body?.repo)).filter(i => i.tipo === 'issue' && (!req.body?.numeros || req.body.numeros.includes(i.numero)));
     let creadas = 0;
     for (const i of lista) {
-      if (db.prepare('SELECT 1 FROM github_links WHERE repo=? AND tipo=? AND numero=?').get(i.repo, i.tipo, i.numero)) continue;
-      const t = store.crear(req.actor, { titulo: i.titulo || `${i.repo}#${i.numero}`, categoria: 'prioritario', area: 'Todos', origen: `GitHub ${i.repo}` }, { tipo: 'actividad', estado: 'propuesta' });
-      guardarLink(t.id, i); creadas++;
+      if (await db.get('SELECT 1 FROM github_links WHERE repo=? AND tipo=? AND numero=?', [i.repo, i.tipo, i.numero])) continue;
+      const t = await store.crear(req.actor, { titulo: i.titulo || `${i.repo}#${i.numero}`, categoria: 'prioritario', area: 'Todos', origen: `GitHub ${i.repo}` }, { tipo: 'actividad', estado: 'propuesta' });
+      await guardarLink(t.id, i); creadas++;
     }
     res.json({ creadas });
-  }));
+  });
 
   app.use('/api', api);
   app.use('/api', (_req, res) => res.status(404).json({ error: 'No encontrado.' }));
@@ -165,12 +165,12 @@ export function crearApp({ cfg, db, fetchImpl }) {
   return app;
 }
 
-/** Copia consistente de la base con rotación. */
+/** Copia consistente de la base local (VACUUM INTO) con rotación. En bases remotas (Turso) usa los backups del proveedor. */
 export async function hacerBackup(db, dir, keep) {
-  const { mkdirSync } = await import('node:fs');
+  if (!db.local) throw new Error('El backup por archivo solo aplica a bases locales.');
   mkdirSync(dir, { recursive: true });
   const f = join(dir, `liva-${new Date().toISOString().replace(/[:.]/g, '-')}.db`);
-  await db.backup(f);
+  await db.run(`VACUUM INTO '${f.replace(/'/g, "''")}'`);
   const viejos = readdirSync(dir).filter(n => /^liva-.*\.db$/.test(n)).map(n => [n, statSync(join(dir, n)).mtimeMs]).sort((a, b) => b[1] - a[1]).slice(keep);
   viejos.forEach(([n]) => unlinkSync(join(dir, n)));
   return f;

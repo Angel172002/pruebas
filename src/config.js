@@ -24,10 +24,15 @@ export function loadConfig(env = process.env) {
   if (prod && ownerToken.length < 12) {
     throw new Error('OWNER_TOKEN es obligatorio en producción (mínimo 12 caracteres).');
   }
+  // En serverless cada instancia arranca por separado: sin un secreto fijo las sesiones no serían válidas entre instancias.
+  if (prod && (env.SESSION_SECRET || '').length < 16) {
+    throw new Error('SESSION_SECRET es obligatorio en producción (mínimo 16 caracteres).');
+  }
   return {
     prod,
     port: Number(env.PORT || 3000),
-    dbPath: env.DB_PATH || './data/app.db',
+    dbUrl: env.DATABASE_URL || `file:${env.DB_PATH || './data/app.db'}`,
+    dbAuthToken: env.DATABASE_AUTH_TOKEN || '',
     ownerToken,
     editorToken: env.EDITOR_TOKEN || '',
     viewerToken: env.VIEWER_TOKEN || '',
