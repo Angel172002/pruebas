@@ -7,6 +7,7 @@ import { loadConfig } from '../src/config.js';
 import { openDb } from '../src/db.js';
 import { crearApp } from '../src/app.js';
 import { sembrarAdmin } from '../src/users.js';
+import { crearGitHub } from '../src/services/github.js';
 import { diasHasta, escalamiento, sumarMes } from '../src/domain.js';
 
 const COM = 'Dirección Comercial', JUR = 'Dirección Jurídica';
@@ -17,7 +18,8 @@ const fakeFetch = async (url, init = {}) => {
   ghCalls.push({ url, init });
   const json = b => ({ ok: true, status: 200, json: async () => b });
   if (init.method === 'POST') return json({ number: 7, title: 'T', html_url: 'https://github.com/o/r/issues/7', state: 'open' });
-  if (/issues\/7$/.test(url)) return json({ number: 7, title: 'T', html_url: 'https://github.com/o/r/issues/7', state: 'closed' });
+  const m = /issues\/(\d+)$/.exec(url);
+  if (m) return json({ number: Number(m[1]), title: 'T', html_url: `https://github.com/o/r/issues/${m[1]}`, state: 'closed' });
   return json([{ number: 9, title: 'Bug', html_url: 'https://github.com/o/r/issues/9', state: 'open' }]);
 };
 const H = { 'content-type': 'application/json', 'x-requested-with': 'liva' };
@@ -265,4 +267,63 @@ test('configuración de producción y recuperación del admin', async () => {
   assert.equal((await login('admin@liva.co', ADMIN_PASS)).status, 401);
   const r = await login('admin@liva.co', 'recuperada-12345');
   assert.equal((await r.json()).user.must_change, true);
+});
+
+test('límite de intentos: una ráfaga paralela no supera el tope y el ingreso correcto no cuenta', async () => {
+  const resp = await Promise.all(Array.from({ length: 30 }, (_, i) => login('rafaga@liva.co', 'mala-clave-' + i)));
+  const s = resp.map(r => r.status);
+  assert.ok(s.filter(x => x === 401).length <= 8, `401: ${s.filter(x => x === 401).length}`);
+  assert.ok(s.filter(x => x === 429).length >= 20);
+  // ingresos correctos repetidos no consumen el límite
+  for (let i = 0; i < 12; i++) assert.equal((await login('jur@liva.co', USER_PASS)).status, 200);
+});
+
+test('cambio de clave propio también tiene límite de intentos', async () => {
+  const r = await login('lec@liva.co', USER_PASS); const c = ck(r);
+  const codigos = [];
+  for (let i = 0; i < 10; i++) codigos.push((await llamar(c, 'POST', '/api/me/password', { actual: 'incorrecta-' + i, nueva: 'Otra-clave-larga-1' })).status);
+  assert.deepEqual([codigos[0], codigos.at(-1)], [401, 429]);
+});
+
+test('recuperación del admin: un solo uso por valor de OWNER_TOKEN', async () => {
+  const cfg = loadConfig({ ADMIN_EMAIL: 'admin@liva.co', OWNER_TOKEN: 'segunda-recuperacion-1', SESSION_SECRET: 's'.repeat(20), ADMIN_RECOVERY: 'true' });
+  await sembrarAdmin(db, cfg);
+  const c = ck(await login('admin@liva.co', 'segunda-recuperacion-1'));
+  assert.equal((await llamar(c, 'POST', '/api/me/password', { actual: 'segunda-recuperacion-1', nueva: 'Clave-definitiva-99' })).status, 200);
+  await sembrarAdmin(db, cfg); // la bandera sigue activa (arranque en frío): no debe pisar la clave nueva
+  assert.equal((await login('admin@liva.co', 'Clave-definitiva-99')).status, 200);
+  assert.equal((await login('admin@liva.co', 'segunda-recuperacion-1')).status, 401);
+  cookies.admin = ck(await login('admin@liva.co', 'Clave-definitiva-99'));
+});
+
+test('modo abierto solo con DEV_OPEN=1 y nunca en producción', () => {
+  assert.equal(loadConfig({}).devOpen, false);
+  assert.equal(loadConfig({ DEV_OPEN: '1' }).devOpen, true);
+  assert.equal(loadConfig({ DEV_OPEN: '1', NODE_ENV: 'production', OWNER_TOKEN: 'x'.repeat(12), SESSION_SECRET: 'y'.repeat(16), ADMIN_EMAIL: 'a@b.co', DATABASE_URL: 'postgres://u:p@h/d' }).devOpen, false);
+});
+
+test('entradas malformadas dan 4xx, no 500', async () => {
+  const { task } = await (await req('com', 'POST', '/api/tasks', act({ titulo: 'Malformadas' }))).json();
+  assert.ok((await req('com', 'PATCH', `/api/tasks/${task.id}`)).status < 500);
+  assert.ok((await req('admin', 'POST', '/api/import', { tareas: [null, 5, 'x', { titulo: 'ok', categoria: 'urgente', direccion: 'Legal' }] })).status < 500);
+  const { usuario } = await (await req('admin', 'POST', '/api/users', { email: 'cad@liva.co', nombre: 'Cad', rol: 'lector', area: COM })).json();
+  assert.equal((await req('admin', 'PATCH', `/api/users/${usuario.id}`, { activo: 'false' })).status, 422);
+  assert.equal((await req('admin', 'PATCH', `/api/users/${usuario.id}`, { activo: false })).status, 200);
+});
+
+test('degradar a otro administrador funciona y deja al menos uno', async () => {
+  const { usuario, temporal } = await (await req('admin', 'POST', '/api/users', { email: 'admin2@liva.co', nombre: 'Admin 2', rol: 'admin' })).json();
+  await activar('admin2@liva.co', temporal, USER_PASS);
+  assert.equal((await req('admin', 'PATCH', `/api/users/${usuario.id}`, { rol: 'miembro', area: JUR })).status, 200);
+  const n = (await db.get("SELECT count(*) AS n FROM users WHERE rol='admin' AND activo=TRUE")).n;
+  assert.ok(n >= 1);
+});
+
+test('GitHub: no se puede apropiar un issue ya vinculado ni aceptar URLs ajenas', async () => {
+  const a = (await (await req('com', 'POST', '/api/tasks', act({ titulo: 'Vinculo A' }))).json()).task;
+  const b = (await (await req('com', 'POST', '/api/tasks', act({ titulo: 'Vinculo B' }))).json()).task;
+  assert.equal((await req('com', 'POST', `/api/tasks/${a.id}/links`, { repo: 'o/r', numero: 8 })).status, 201);
+  assert.equal((await req('com', 'POST', `/api/tasks/${b.id}/links`, { repo: 'o/r', numero: 8 })).status, 409);
+  const malo = crearGitHub({ token: 't', repos: ['o/r'], fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ number: 1, title: 'x', html_url: 'javascript:alert(1)', state: 'open' }) }) });
+  await assert.rejects(malo.obtener('o/r', 1), /URL inesperada/);
 });

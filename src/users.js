@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AREAS, TODOS } from './config.js';
 import { claveTemporal, hashClave, publico } from './auth.js';
 
@@ -12,13 +12,18 @@ export async function sembrarAdmin(db, cfg) {
   const hash = await hashClave(cfg.ownerToken);
   const existente = await db.get('SELECT id FROM users WHERE email = ?', [cfg.adminEmail]);
   if (existente && cfg.adminRecovery) {
-    await db.run("UPDATE users SET pass_hash=?, must_change=TRUE, activo=TRUE, rol='admin', area=NULL, session_version=session_version+1 WHERE id=?", [hash, existente.id]);
+    // Recuperación de UN solo uso por cada valor de OWNER_TOKEN: si la bandera se queda activa, los arranques en frío
+    // posteriores no vuelven a pisar la clave del admin. Para repetirla hay que usar un OWNER_TOKEN distinto.
+    const marca = `admin_recovery:${createHash('sha256').update(cfg.ownerToken).digest('hex').slice(0, 16)}`;
+    const nueva = await db.run('INSERT INTO schema_migrations(name, applied_at) VALUES (?,?) ON CONFLICT DO NOTHING', [marca, ahora()]);
+    if (nueva.changes) await db.run("UPDATE users SET pass_hash=?, must_change=TRUE, activo=TRUE, rol='admin', area=NULL, session_version=session_version+1 WHERE id=?", [hash, existente.id]);
     return;
   }
   const hayAdmin = await db.get("SELECT 1 AS x FROM users WHERE rol='admin' AND activo=TRUE LIMIT 1");
   if (hayAdmin || existente) return;
-  await db.run('INSERT INTO users(id,email,nombre,rol,area,pass_hash,must_change,activo,session_version,created_at) VALUES (?,?,?,?,?,?,TRUE,TRUE,1,?)',
-    [randomUUID(), cfg.adminEmail, 'Administrador', 'admin', null, hash, ahora()]);
+  // Si dos instancias arrancan a la vez, la UNIQUE(email) + DO NOTHING hace que solo una cree al admin.
+  await db.run(`INSERT INTO users(id,email,nombre,rol,area,pass_hash,must_change,activo,session_version,created_at) VALUES (?,?,?,?,?,?,TRUE,TRUE,1,?)
+    ON CONFLICT DO NOTHING`, [randomUUID(), cfg.adminEmail, 'Administrador', 'admin', null, hash, ahora()]);
 }
 
 function validar(b, { parcial = false } = {}) {
@@ -42,12 +47,14 @@ function validar(b, { parcial = false } = {}) {
       v.area = b.area;
     }
   }
-  if (b.activo !== undefined) v.activo = Boolean(b.activo);
+  if (b.activo !== undefined) {
+    if (typeof b.activo !== 'boolean') throw new UsuarioError('El estado debe ser verdadero o falso.');
+    v.activo = b.activo;
+  }
   return v;
 }
 
 export function crearUsuarios(db) {
-  const admins = async () => Number((await db.get("SELECT count(*) AS n FROM users WHERE rol='admin' AND activo=TRUE")).n);
   return {
     listar: () => db.all('SELECT id,email,nombre,rol,area,must_change,activo,created_at,last_login FROM users ORDER BY activo DESC, rol, nombre'),
     async crear(actor, b) {
@@ -55,8 +62,9 @@ export function crearUsuarios(db) {
       if (await db.get('SELECT 1 AS x FROM users WHERE email = ?', [v.email])) throw new UsuarioError('Ese correo ya está registrado.', 409);
       const temporal = claveTemporal();
       const id = randomUUID();
-      await db.run('INSERT INTO users(id,email,nombre,rol,area,pass_hash,must_change,activo,session_version,created_at) VALUES (?,?,?,?,?,?,TRUE,TRUE,1,?)',
+      const r = await db.run('INSERT INTO users(id,email,nombre,rol,area,pass_hash,must_change,activo,session_version,created_at) VALUES (?,?,?,?,?,?,TRUE,TRUE,1,?) ON CONFLICT DO NOTHING',
         [id, v.email, v.nombre, v.rol, v.area, await hashClave(temporal), ahora()]);
+      if (!r.changes) throw new UsuarioError('Ese correo ya está registrado.', 409);
       return { usuario: publico(await db.get('SELECT * FROM users WHERE id = ?', [id])), temporal };
     },
     async actualizar(actor, id, b) {
@@ -65,10 +73,18 @@ export function crearUsuarios(db) {
       const v = validar({ ...b, rol: b.rol ?? u.rol, area: b.area ?? u.area }, { parcial: true });
       const nuevo = { ...u, ...v };
       if (id === actor.id && (nuevo.rol !== 'admin' || !nuevo.activo)) throw new UsuarioError('No puedes quitarte el rol de administrador ni desactivarte.');
-      if (u.rol === 'admin' && u.activo && (nuevo.rol !== 'admin' || !nuevo.activo) && await admins() <= 1) throw new UsuarioError('Debe quedar al menos un administrador activo.');
       const cambioAcceso = nuevo.rol !== u.rol || nuevo.area !== u.area || nuevo.activo !== u.activo;
-      await db.run('UPDATE users SET nombre=?, rol=?, area=?, activo=?, session_version=session_version+? WHERE id=?',
+      const aplicar = x => x.run('UPDATE users SET nombre=?, rol=?, area=?, activo=?, session_version=session_version+? WHERE id=?',
         [nuevo.nombre, nuevo.rol, nuevo.area, nuevo.activo, cambioAcceso ? 1 : 0, id]);
+      if (u.rol === 'admin' && u.activo && (nuevo.rol !== 'admin' || !nuevo.activo)) {
+        // Quitar un admin: el lock evita que dos admins se degraden a la vez y dejen el sistema sin ninguno.
+        await db.tx(async x => {
+          await x.run('SELECT pg_advisory_xact_lock(7412002)');
+          const n = Number((await x.get("SELECT count(*) AS n FROM users WHERE rol='admin' AND activo=TRUE")).n);
+          if (n <= 1) throw new UsuarioError('Debe quedar al menos un administrador activo.');
+          await aplicar(x);
+        });
+      } else await aplicar(db);
       return publico(await db.get('SELECT * FROM users WHERE id = ?', [id]));
     },
     async restablecer(actor, id) {

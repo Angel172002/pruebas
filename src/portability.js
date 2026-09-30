@@ -14,9 +14,11 @@ const monto = v => {
 export function normalizarImport(body) {
   const filas = [], rechazos = [];
   const fuentes = [];
-  if (Array.isArray(body?.tasks)) body.tasks.forEach(x => fuentes.push([x.tipo === 'pago' ? 'pago' : 'actividad', x]));
-  if (Array.isArray(body?.tareas)) body.tareas.filter(x => x.tipo !== 'pago').forEach(x => fuentes.push(['actividad', x]));
+  if (Array.isArray(body?.tasks)) body.tasks.forEach(x => fuentes.push([x?.tipo === 'pago' ? 'pago' : 'actividad', x]));
+  if (Array.isArray(body?.tareas)) body.tareas.filter(x => x?.tipo !== 'pago').forEach(x => fuentes.push(['actividad', x]));
   if (Array.isArray(body?.pagos)) body.pagos.forEach(x => fuentes.push(['pago', x]));
+  const validos = fuentes.filter(([, x]) => x && typeof x === 'object' && !Array.isArray(x));
+  fuentes.length = 0; fuentes.push(...validos);
   if (!fuentes.length) return { error: 'El archivo no contiene "tareas", "pagos" ni "tasks".' };
   for (const [tipo, x] of fuentes) {
     const titulo = String(x.titulo ?? '').trim().slice(0, 160);

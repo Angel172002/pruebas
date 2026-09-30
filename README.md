@@ -8,8 +8,8 @@ y vínculo con issues de GitHub. Evolución del artifact original (`legacy/gesto
 
 ```bash
 npm install
-cp .env.example .env      # opcional; sin claves y fuera de producción corre en modo desarrollo (owner)
-npm start                 # http://localhost:3000
+npm run dev               # http://localhost:3000 — DEV_OPEN=1: entra como administrador sin login (nunca en producción)
+# Con login real: define ADMIN_EMAIL y OWNER_TOKEN (ver .env.example) y usa `npm start`
 npm test
 ```
 
@@ -30,7 +30,9 @@ Cada persona entra con **su propio correo y clave**. El administrador crea y ges
 - Bloqueo tras intentos fallidos (por correo y por IP, guardado en base de datos, vale entre instancias serverless). Mensajes de error genéricos.
 - Sesión en cookie `HttpOnly; SameSite=Strict` firmada (12 h), cabecera anti-CSRF, CSP estricto, validación de esquema, dinero como entero (COP), versión optimista y auditoría con el **usuario real** de cada cambio.
 - **Primer administrador**: se crea al arrancar con `ADMIN_EMAIL` y, como clave temporal, `OWNER_TOKEN` (debes cambiarla al entrar). `OWNER_TOKEN` no vuelve a usarse como clave de acceso.
-- **Recuperación** si el admin pierde su clave: define `ADMIN_RECOVERY=true` (con `ADMIN_EMAIL` y `OWNER_TOKEN`), despliega, ingresa con `OWNER_TOKEN`, cambia la clave y **quita `ADMIN_RECOVERY`**.
+- **Recuperación** si el admin pierde su clave: pon `ADMIN_RECOVERY=true` y un **`OWNER_TOKEN` nuevo** (el mismo `ADMIN_EMAIL`), despliega, ingresa con ese `OWNER_TOKEN` y cámbialo. Se aplica **una sola vez por cada valor de `OWNER_TOKEN`**, así que si la bandera se queda activa no vuelve a pisar tu clave; aun así quítala después.
+- **Modo desarrollo abierto** (`DEV_OPEN=1`): solo fuera de producción y solo si se pide de forma explícita.
+- Límites: intentos por correo+IP (8), por correo (30) y por IP (40) cada 15 min, registrados **antes** de verificar la clave (una ráfaga paralela no los evade); el cambio de clave propio también tiene límite.
 
 ## Reglas de negocio
 

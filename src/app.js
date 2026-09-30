@@ -11,7 +11,7 @@ import { aCsv, exportar, importar, normalizarImport } from './portability.js';
 import { GitHubError, crearGitHub } from './services/github.js';
 
 const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
-const VENTANA_MS = 15 * 60000, MAX_POR_CORREO = 8, MAX_POR_IP = 40;
+const VENTANA_MS = 15 * 60000, MAX_POR_PAR = 8, MAX_POR_CORREO = 30, MAX_POR_IP = 40;
 const SIN_SESION = 'sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0';
 
 export function crearApp({ cfg, db, fetchImpl }) {
@@ -44,28 +44,29 @@ export function crearApp({ cfg, db, fetchImpl }) {
     github: { configurado: gh.configurado(), repos: req.user?.rol === 'admin' || req.user?.rol === 'miembro' ? gh.repos() : [] }
   }));
 
-  // Bloqueo por intentos fallidos (en base de datos: sirve entre instancias serverless).
-  async function bloqueado(claves) {
-    const desde = Date.now() - VENTANA_MS;
+  // Límite de intentos (en base de datos: vale entre instancias serverless). El intento se registra ANTES de
+  // verificar la clave, así una ráfaga paralela no puede superar el tope. Claves: par correo+IP (estricto),
+  // correo solo (más alto, para que nadie pueda dejar fuera al admin desde otra IP) e IP.
+  async function registrarIntento(claves) {
+    const t = Date.now(), ids = [];
+    await db.run('DELETE FROM login_attempts WHERE at_ms < ?', [t - VENTANA_MS]);
     for (const [clave, max] of claves) {
-      const n = Number((await db.get('SELECT count(*) AS n FROM login_attempts WHERE clave = ? AND at_ms > ?', [clave, desde])).n);
-      if (n >= max) return true;
+      const fila = (await db.all('INSERT INTO login_attempts(clave, at_ms) VALUES (?,?) RETURNING id', [clave, t]))[0];
+      ids.push(fila.id);
+      const n = Number((await db.get('SELECT count(*) AS n FROM login_attempts WHERE clave = ? AND at_ms > ?', [clave, t - VENTANA_MS])).n);
+      if (n > max) return { bloqueado: true, ids };
     }
-    return false;
+    return { bloqueado: false, ids };
   }
+  const olvidar = ids => ids.length ? db.run(`DELETE FROM login_attempts WHERE id IN (${ids.map(() => '?').join(',')})`, ids) : null;
   app.post('/api/login', async (req, res) => {
-    const correo = String(req.body?.email ?? '').trim().toLowerCase(), clave = String(req.body?.password ?? '');
-    const kc = `c:${correo.slice(0, 120)}`, ki = `i:${req.ip}`;
-    if (await bloqueado([[kc, MAX_POR_CORREO], [ki, MAX_POR_IP]])) return res.status(429).json({ error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' });
+    const correo = String(req.body?.email ?? '').trim().toLowerCase().slice(0, 120), clave = String(req.body?.password ?? '');
+    const intento = await registrarIntento([[`p:${correo}|${req.ip}`, MAX_POR_PAR], [`c:${correo}`, MAX_POR_CORREO], [`i:${req.ip}`, MAX_POR_IP]]);
+    if (intento.bloqueado) return res.status(429).json({ error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' });
     const u = esCorreo(correo) && clave.length <= 128 ? await db.get('SELECT * FROM users WHERE email = ?', [correo]) : undefined;
     const ok = await verificarClave(clave, u ? u.pass_hash : await hashFalso()) && u && u.activo;
-    if (!ok) {
-      const t = Date.now();
-      await db.run('INSERT INTO login_attempts(clave, at_ms) VALUES (?,?), (?,?)', [kc, t, ki, t]);
-      await db.run('DELETE FROM login_attempts WHERE at_ms < ?', [t - VENTANA_MS]);
-      return res.status(401).json({ error: 'Correo o clave incorrectos.' });
-    }
-    await db.run('DELETE FROM login_attempts WHERE clave = ?', [kc]);
+    if (!ok) return res.status(401).json({ error: 'Correo o clave incorrectos.' });
+    await olvidar(intento.ids); // un ingreso correcto no cuenta contra el límite
     await db.run('UPDATE users SET last_login = ? WHERE id = ?', [new Date().toISOString(), u.id]);
     res.set('Set-Cookie', `sid=${crearSesion(u, cfg.sessionSecret)}; ${cookieOpts(cfg)}`)
       .json({ user: { id: u.id, email: u.email, nombre: u.nombre, rol: u.rol, area: u.area, must_change: Boolean(u.must_change) } });
@@ -74,8 +75,11 @@ export function crearApp({ cfg, db, fetchImpl }) {
   app.post('/api/me/password', async (req, res) => {
     if (!req.user || req.user.id === 'dev') return res.status(401).json({ error: 'Inicia sesión.' });
     const { actual, nueva } = req.body || {};
+    const intento = await registrarIntento([[`k:${req.user.id}`, MAX_POR_PAR]]);
+    if (intento.bloqueado) return res.status(429).json({ error: 'Demasiados intentos. Espera unos minutos.' });
     const fila = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
     if (!(await verificarClave(String(actual ?? ''), fila.pass_hash))) return res.status(401).json({ error: 'La clave actual no es correcta.' });
+    await olvidar(intento.ids);
     const err = validarClaveNueva(nueva, actual);
     if (err) return res.status(422).json({ error: err });
     const u = await usuarios.cambiarClave(req.user.id, nueva);
@@ -118,7 +122,7 @@ export function crearApp({ cfg, db, fetchImpl }) {
     const cuerpo = esAdmin(req) ? req.body || {} : { ...req.body, area: t.area };
     const { error, valor } = validarTarea(cuerpo, { tipo: t.tipo, parcial: true });
     if (error) return res.status(422).json({ error });
-    res.json({ task: await store.actualizar(req.actor, t.id, valor, Number.isInteger(req.body.version) ? req.body.version : undefined) });
+    res.json({ task: await store.actualizar(req.actor, t.id, valor, Number.isInteger(req.body?.version) ? req.body.version : undefined) });
   });
   api.post('/tasks/:id/transition', requiere('miembro'), async (req, res) => {
     const t = await cargarEditable(req, res); if (!t) return;
@@ -180,6 +184,8 @@ export function crearApp({ cfg, db, fetchImpl }) {
   api.post('/tasks/:id/links', requiere('miembro'), async (req, res) => {
     const t = await cargarEditable(req, res); if (!t) return;
     const l = await gh.obtener(req.body?.repo, Number(req.body?.numero));
+    const previo = await db.get('SELECT task_id FROM github_links WHERE repo=? AND tipo=? AND numero=?', [l.repo, l.tipo, l.numero]);
+    if (previo && previo.task_id !== t.id) return res.status(409).json({ error: 'Ese issue ya está vinculado a otra actividad.' });
     await guardarLink(t.id, l); await store.evento(t.id, req.actor, 'github', `Vinculado ${l.repo}#${l.numero}`);
     res.status(201).json({ link: l });
   });
@@ -215,7 +221,9 @@ export function crearApp({ cfg, db, fetchImpl }) {
   app.use(express.static(PUBLIC, { index: 'index.html', maxAge: cfg.prod ? '1h' : 0 }));
 
   app.use((err, req, res, _next) => {
-    const status = err.status || (err.type === 'entity.parse.failed' ? 400 : 500);
+    const status = err.status || (err.type === 'entity.parse.failed' ? 400 : err.code === '23505' ? 409 : err.code === '23514' ? 422 : 500);
+    if (!err.status && err.code === '23505') err.message = 'Ya existe un registro igual.';
+    if (!err.status && err.code === '23514') err.message = 'Los datos no cumplen las reglas de validación.';
     const id = randomUUID().slice(0, 8);
     if (status >= 500) console.error(JSON.stringify({ level: 'error', id, path: req.path, msg: err.message }));
     res.status(status).json({ error: status >= 500 && !(err instanceof GitHubError) ? `Error interno (ref ${id}).` : err.message });

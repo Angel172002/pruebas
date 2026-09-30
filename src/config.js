@@ -42,6 +42,7 @@ export function loadConfig(env = process.env) {
     port: Number(env.PORT || 3000),
     dbUrl,
     ownerToken,
+    devOpen: !prod && env.DEV_OPEN === '1', // modo abierto (admin sintético) solo si se pide de forma explícita
     adminEmail,
     adminRecovery: env.ADMIN_RECOVERY === 'true',
     sessionSecret: env.SESSION_SECRET || randomBytes(32).toString('hex'),

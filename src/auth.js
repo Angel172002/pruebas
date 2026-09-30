@@ -51,8 +51,8 @@ export const publico = u => ({ id: u.id, email: u.email, nombre: u.nombre, rol: 
 const cookies = h => Object.fromEntries(String(h || '').split(';').map(c => c.trim().split(/=(.*)/s).slice(0, 2)).filter(([k]) => k));
 
 export function authMiddleware(cfg, db) {
-  // Sin OWNER_TOKEN y fuera de producción: modo desarrollo (admin sintético) para probar localmente.
-  const abierto = !cfg.prod && !cfg.ownerToken;
+  // Modo desarrollo (admin sintético): solo con DEV_OPEN=1 y nunca en producción.
+  const abierto = cfg.devOpen === true;
   return async (req, _res, next) => {
     if (abierto) req.user = { id: 'dev', email: 'dev@local', nombre: 'Desarrollo', rol: 'admin', area: null, must_change: false };
     else {
