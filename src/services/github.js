@@ -37,9 +37,13 @@ export function crearGitHub({ token, repos, fetchImpl = fetch }) {
     if (!res.ok) throw new GitHubError(`GitHub respondió ${res.status}.`);
     return res.json();
   }
+  const urlSegura = u => {
+    if (!/^https:\/\/github\.com\//.test(String(u))) throw new GitHubError('GitHub devolvió una URL inesperada.');
+    return u;
+  };
   const normalizar = (repo, x) => ({
     repo, tipo: x.pull_request ? 'pr' : 'issue', numero: x.number, titulo: String(x.title || '').slice(0, 200),
-    url: x.html_url, estado: x.pull_request?.merged_at ? 'merged' : x.state
+    url: urlSegura(x.html_url), estado: x.pull_request?.merged_at ? 'merged' : x.state
   });
   return {
     configurado: () => Boolean(token),

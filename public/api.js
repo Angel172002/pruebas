@@ -1,4 +1,4 @@
-export class ApiError extends Error { constructor(m, status, code) { super(m); this.status = status; } }
+export class ApiError extends Error { constructor(m, status, code) { super(m); this.status = status; this.code = code; } }
 
 async function call(method, path, body) {
   let res;
@@ -11,7 +11,7 @@ async function call(method, path, body) {
   } catch { throw new ApiError('Sin conexión con el servidor.', 0); }
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(data.error || `Error ${res.status}`, res.status);
+  if (!res.ok) throw new ApiError(data.error || `Error ${res.status}`, res.status, data.code);
   return data;
 }
 export const api = {

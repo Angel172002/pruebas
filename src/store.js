@@ -15,9 +15,14 @@ export function crearStore(db) {
     return { ...t, ...escalamiento(t, hoy), dias: n, vencida: t.estado === 'pendiente' && n !== null && n < 0, recurrente: t.serie_id ? 'mensual' : 'no' };
   }
 
-  async function listar({ incluirPagos }) {
+  /** `area`: si se indica, solo actividades visibles de esa dirección (y las de "Todos"), para usuarios no admin. */
+  async function listar({ incluirPagos, area = null }) {
+    const args = [];
+    const filtros = [];
+    if (!incluirPagos || area) filtros.push("t.tipo = 'actividad' AND t.estado IN ('pendiente','cerrada')");
+    if (area) { filtros.push('(t.area = ? OR t.area = ?)'); args.push(area, 'Todos'); }
     const filas = await db.all(`SELECT t.*, (SELECT count(*) FROM github_links g WHERE g.task_id = t.id) AS n_links
-      FROM tasks t ${incluirPagos ? '' : "WHERE t.tipo = 'actividad' AND t.estado IN ('pendiente','cerrada')"} ORDER BY t.fecha_limite IS NULL, t.fecha_limite, t.created_at`);
+      FROM tasks t ${filtros.length ? 'WHERE ' + filtros.join(' AND ') : ''} ORDER BY t.fecha_limite IS NULL, t.fecha_limite, t.created_at`, args);
     const hoy = hoyISO();
     return filas.map(t => enriquecer(t, hoy));
   }
@@ -121,9 +126,9 @@ export function crearStore(db) {
     });
   }
 
-  async function resumen(incluirPagos) {
+  async function resumen(incluirPagos, area = null) {
     const hoy = hoyISO();
-    const ts = (await listar({ incluirPagos })).filter(t => t.estado !== 'propuesta' && t.estado !== 'descartada');
+    const ts = (await listar({ incluirPagos, area })).filter(t => t.estado !== 'propuesta' && t.estado !== 'descartada');
     const acts = ts.filter(t => t.tipo === 'actividad'), pagos = ts.filter(t => t.tipo === 'pago');
     const abiertas = acts.filter(t => t.estado === 'pendiente');
     const delegadas = abiertas.filter(t => t.area !== 'Dirección General' && t.area !== 'Todos').length;

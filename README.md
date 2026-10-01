@@ -8,25 +8,31 @@ y vínculo con issues de GitHub. Evolución del artifact original (`legacy/gesto
 
 ```bash
 npm install
-cp .env.example .env      # opcional; sin claves y fuera de producción corre en modo desarrollo (owner)
-npm start                 # http://localhost:3000
+npm run dev               # http://localhost:3000 — DEV_OPEN=1: entra como administrador sin login (nunca en producción)
+# Con login real: define ADMIN_EMAIL y OWNER_TOKEN (ver .env.example) y usa `npm start`
 npm test
 ```
 
 Node 22+. Base de datos **PostgreSQL**: en local usa PGlite (Postgres embebido, sin instalar nada, datos en `./data/pglite`); en producción, Neon u otro Postgres vía `DATABASE_URL`. Migraciones automáticas en `migrations/`.
 
-## Roles y seguridad
+## Acceso, roles y seguridad
 
-| Rol | Clave | Puede |
+Cada persona entra con **su propio correo y clave**. El administrador crea y gestiona al equipo en la pestaña **Usuarios**.
+
+| Rol | Ve | Puede |
 |---|---|---|
-| owner | `OWNER_TOKEN` | Todo: pagos, Por confirmar, eliminar, importar/exportar, importar issues |
-| editor | `EDITOR_TOKEN` | Crear/editar/cerrar actividades, vincular GitHub. No ve pagos ni propuestas |
-| viewer | `VIEWER_TOKEN` | Solo lectura de actividades |
+| **admin** | Todo: todas las direcciones, pagos, *Por confirmar*, usuarios, datos | Todo, incluido crear usuarios, restablecer claves, eliminar, importar/exportar |
+| **miembro** | Solo el panel de **su dirección** (y lo marcado "Todos", en lectura) | Crear, editar y cerrar actividades de su dirección; vincular issues de GitHub |
+| **lector** | Solo el panel de su dirección | Nada de escritura |
 
-Los permisos se aplican **en el servidor**; los pagos nunca se envían a quien no es owner. Sesión en cookie
-`HttpOnly; SameSite=Strict` firmada, cabecera anti-CSRF, CSP estricto, validación de esquema, dinero como entero (COP),
-versión optimista contra ediciones concurrentes, y auditoría de cada cambio (incluso eliminaciones).
-En producción `OWNER_TOKEN` es obligatorio.
+- Las reglas se aplican **en el servidor**: lo de otra dirección se comporta como si no existiera (404) y un miembro no puede crear ni mover tareas a otra dirección. Los pagos nunca se envían a quien no es admin.
+- Claves con hash **scrypt**; la clave temporal que entrega el admin obliga a cambiarla en el primer ingreso; restablecer, desactivar o cambiar de dirección a un usuario **cierra sus sesiones** de inmediato.
+- Bloqueo tras intentos fallidos (por correo y por IP, guardado en base de datos, vale entre instancias serverless). Mensajes de error genéricos.
+- Sesión en cookie `HttpOnly; SameSite=Strict` firmada (12 h), cabecera anti-CSRF, CSP estricto, validación de esquema, dinero como entero (COP), versión optimista y auditoría con el **usuario real** de cada cambio.
+- **Primer administrador**: se crea al arrancar con `ADMIN_EMAIL` y, como clave temporal, `OWNER_TOKEN` (debes cambiarla al entrar). `OWNER_TOKEN` no vuelve a usarse como clave de acceso.
+- **Recuperación** si el admin pierde su clave: pon `ADMIN_RECOVERY=true` y un **`OWNER_TOKEN` nuevo** (el mismo `ADMIN_EMAIL`), despliega, ingresa con ese `OWNER_TOKEN` y cámbialo. Se aplica **una sola vez por cada valor de `OWNER_TOKEN`**, así que si la bandera se queda activa no vuelve a pisar tu clave; aun así quítala después.
+- **Modo desarrollo abierto** (`DEV_OPEN=1`): solo fuera de producción y solo si se pide de forma explícita.
+- Límites: intentos por correo+IP (8), por correo (30) y por IP (40) cada 15 min, registrados **antes** de verificar la clave (una ráfaga paralela no los evade); el cambio de clave propio también tiene límite.
 
 ## Reglas de negocio
 
@@ -60,19 +66,18 @@ Vercel es serverless (disco efímero), por eso en producción la base es **Neon*
    |---|---|
    | `NODE_ENV` | `production` |
    | `DATABASE_URL` | la pone la integración de Neon |
-   | `OWNER_TOKEN` | clave larga (≥ 12) |
+   | `ADMIN_EMAIL` | correo del administrador |
+   | `OWNER_TOKEN` | clave **inicial** del admin (≥ 12); se te pedirá cambiarla al entrar |
    | `SESSION_SECRET` | aleatorio (≥ 16): `openssl rand -hex 32` |
-   | `EDITOR_TOKEN`, `VIEWER_TOKEN` | opcionales |
    | `GITHUB_TOKEN`, `GITHUB_REPOS` | opcionales (ver GitHub) |
 4. Despliega. Comprueba `https://<tu-app>.vercel.app/readyz`. Las migraciones se aplican solas en el primer arranque.
 
-Notas: el límite de intentos de login es por instancia (en serverless es una protección básica; usa claves largas).
 Respaldo: Neon ofrece restauración a un punto en el tiempo y *branches*; guarda además copias con *Exportar JSON*.
 Usa un *branch* de Neon distinto para *preview deployments* si no quieres que los PR toquen los datos reales.
 
 ## Otras opciones
 
-- **Docker / Render / Fly.io**: `docker build -t liva . && docker run -p 3000:3000 -e NODE_ENV=production -e DATABASE_URL=… -e OWNER_TOKEN=… -e SESSION_SECRET=… liva`.
+- **Docker / Render / Fly.io**: `docker build -t liva . && docker run -p 3000:3000 -e NODE_ENV=production -e DATABASE_URL=… -e ADMIN_EMAIL=… -e OWNER_TOKEN=… -e SESSION_SECRET=… liva`.
   `render.yaml` incluye un Blueprint (sin disco: la base es Neon).
 - `/healthz` y `/readyz` para health checks. Logs JSON a stdout.
 
@@ -89,10 +94,10 @@ api/         entrada serverless de Vercel
 src/         server, app (rutas), store (lógica transaccional), domain (reglas), auth, portability, services/github
 public/      frontend (módulos ES, sin build, sin innerHTML con datos)
 migrations/  SQL versionado (tabla schema_migrations)
-test/        node:test (API, roles, recurrencia, importación, GitHub simulado); con `TEST_DATABASE_URL` corre contra Postgres real
+test/        node:test (API, usuarios y aislamiento por dirección, recurrencia, importación, GitHub simulado); con `TEST_DATABASE_URL` corre contra Postgres real
 ```
 
 ## Fuera de alcance por ahora
 
-Recordatorios por correo/push, edición masiva, usuarios individuales con SSO/MFA (hoy: claves por rol), entidad Reunión propia,
+Recordatorios por correo/push, edición masiva, SSO/MFA, autoservicio de "olvidé mi clave" por correo, entidad Reunión propia,
 adjuntos/comprobantes de pago.
