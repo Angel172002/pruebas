@@ -13,17 +13,24 @@
 <a class="skip" href="#main">Saltar al contenido</a>
 
 <section id="login" class="auth" hidden>
-  <div class="auth-hero" aria-hidden="true">
+  <aside class="auth-hero" aria-hidden="true">
     <div class="auth-brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span><span>LIVA</span></div>
-    <h2>Cada dirección,<br>su propio panel.</h2>
-    <p>Actividades, pagos y seguimiento en un solo lugar, con lo urgente siempre primero.</p>
-    <ul class="auth-pills"><li class="p-urg">Urgente</li><li class="p-pri">Prioritario</li><li class="p-imp">Importante</li></ul>
-  </div>
+    <div class="auth-copy">
+      <h2>Lo urgente,<br>siempre primero.</h2>
+      <p>Cada dirección trabaja en su propio panel: actividades, pagos y seguimiento en un solo lugar.</p>
+    </div>
+    <div class="bp">
+      <div class="bp-col u"><div class="bp-h"><b>Urgente</b><i>2</i></div><div class="bp-card"><span></span><span class="s"></span></div><div class="bp-card"><span></span><span class="s"></span></div></div>
+      <div class="bp-col p"><div class="bp-h"><b>Prioritario</b><i>3</i></div><div class="bp-card"><span></span><span class="s"></span></div><div class="bp-card"><span></span><span class="s"></span></div></div>
+      <div class="bp-col i"><div class="bp-h"><b>Importante</b><i>4</i></div><div class="bp-card"><span></span><span class="s"></span></div><div class="bp-card"><span></span><span class="s"></span></div></div>
+    </div>
+  </aside>
   <div class="auth-panel">
     <form id="loginForm" class="auth-card" novalidate>
-      <h1>Bienvenido</h1>
-      <p class="auth-sub">Ingresa con tu correo y tu clave para ver tu panel.</p>
-      <div class="field"><label for="lCorreo">Correo</label><input id="lCorreo" type="email" autocomplete="username" inputmode="email" required></div>
+      <div class="auth-stripe" aria-hidden="true"><i></i><i></i><i></i></div>
+      <h1>Iniciar sesión</h1>
+      <p class="auth-sub">Ingresa con tu correo y tu clave para ver el panel de tu dirección.</p>
+      <div class="field"><label for="lCorreo">Correo</label><input id="lCorreo" type="email" autocomplete="username" inputmode="email" placeholder="nombre@empresa.com" required></div>
       <div class="field"><label for="lClave">Clave</label>
         <div class="pass"><input id="lClave" type="password" autocomplete="current-password" required>
         <button type="button" id="lVer" class="pass-btn" aria-pressed="false" aria-label="Mostrar la clave">Ver</button></div></div>
@@ -31,72 +38,92 @@
       <button class="btn primary big" id="lEntrar" type="submit">Entrar</button>
       <p class="auth-foot">¿Olvidaste tu clave? Pídele al administrador que la restablezca.</p>
     </form>
+    <p class="auth-legal">Acceso restringido al equipo directivo</p>
   </div>
 </section>
 
 <section id="forzar" class="auth" hidden>
-  <div class="auth-hero" aria-hidden="true">
+  <aside class="auth-hero" aria-hidden="true">
     <div class="auth-brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span><span>LIVA</span></div>
-    <h2>Un último paso<br>para proteger tu cuenta.</h2>
-    <p>Crea tu propia clave. La temporal que recibiste dejará de servir.</p>
-  </div>
-  <div class="auth-panel"><div class="auth-card" id="forzarCuerpo"></div></div>
+    <div class="auth-copy">
+      <h2>Un último paso para proteger tu cuenta.</h2>
+      <p>Crea tu propia clave. La temporal que recibiste dejará de servir.</p>
+    </div>
+    <div></div>
+  </aside>
+  <div class="auth-panel"><div class="auth-card" id="forzarCuerpo"><div class="auth-stripe" aria-hidden="true"><i></i><i></i><i></i></div></div></div>
 </section>
 
-<div class="wrap" id="app" hidden>
-  <header class="top">
-    <div>
-      <h1>Gestor Directivo – LIVA</h1>
-      <p class="hoy" id="hoy"></p>
+<div id="app" hidden>
+  <header class="appbar">
+    <div class="appbar-in">
+      <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span><span class="brand-t"><b>LIVA</b><small>Gestor Directivo</small></span></div>
+      <div class="appbar-r">
+        <button class="icon-btn" id="bTema" type="button" aria-label="Cambiar tema claro u oscuro" title="Cambiar tema"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+        <div class="menu-wrap">
+          <button class="user-btn" id="bUsuario" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="menuUsuario">
+            <span class="avatar" id="avatar" aria-hidden="true"></span>
+            <span class="user-t"><b id="hNombre"></b><small id="hRol"></small></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="menu" id="menuUsuario" role="menu" aria-label="Cuenta" hidden>
+            <div class="menu-h"><b id="mNombre"></b><small id="mCorreo"></small></div>
+            <button type="button" role="menuitem" id="bCuenta">Cambiar mi clave</button>
+            <button type="button" role="menuitem" id="bSalir">Cerrar sesión</button>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="controls">
-      <input id="fBuscar" type="search" placeholder="Buscar…" aria-label="Buscar por título, notas, origen o responsable">
-      <select id="fDir" aria-label="Filtrar por dirección"></select>
-      <select id="fEstado" aria-label="Filtrar por estado">
-        <option value="abiertas">Abiertas</option>
-        <option value="vencidas">Vencidas</option>
-        <option value="semana">Vencen en 7 días</option>
-        <option value="cerradas">Cerradas</option>
-        <option value="todas">Todas</option>
-      </select>
-      <button class="btn quiet" id="bTema" type="button" aria-label="Cambiar tema claro/oscuro">Tema</button>
-      <span class="quien" id="quien"></span>
-      <button class="btn quiet" id="bCuenta" type="button">Mi clave</button>
-      <button class="btn quiet" id="bSalir" type="button">Salir</button>
+    <div class="appbar-tabs">
+      <nav class="tabs" role="tablist" aria-label="Secciones">
+        <button class="tab" role="tab" id="tab-actividades" aria-controls="pan-actividades" data-tab="actividades">Actividades <span class="n" id="nAct">0</span></button>
+        <button class="tab" role="tab" id="tab-pagos" aria-controls="pan-pagos" data-tab="pagos" hidden>Pagos <span class="n" id="nPag">0</span></button>
+        <button class="tab" role="tab" id="tab-confirmar" aria-controls="pan-confirmar" data-tab="confirmar" hidden>Por confirmar <span class="n alerta" id="nConf">0</span></button>
+        <button class="tab" role="tab" id="tab-usuarios" aria-controls="pan-usuarios" data-tab="usuarios" hidden>Usuarios</button>
+        <button class="tab" role="tab" id="tab-datos" aria-controls="pan-datos" data-tab="datos" hidden>Datos y GitHub</button>
+      </nav>
+      <span class="hoy" id="hoy"></span>
     </div>
   </header>
 
-  <div id="aviso" class="aviso" role="alert" hidden></div>
+  <div class="wrap">
+    <div id="aviso" class="aviso" role="alert" hidden></div>
 
-  <nav class="tabs" role="tablist" aria-label="Secciones">
-    <button class="tab" role="tab" id="tab-actividades" aria-controls="pan-actividades" data-tab="actividades">Actividades <span class="n" id="nAct">0</span></button>
-    <button class="tab" role="tab" id="tab-pagos" aria-controls="pan-pagos" data-tab="pagos" hidden>Pagos <span class="n" id="nPag">0</span></button>
-    <button class="tab" role="tab" id="tab-confirmar" aria-controls="pan-confirmar" data-tab="confirmar" hidden>Por confirmar <span class="n alerta" id="nConf">0</span></button>
-    <button class="tab" role="tab" id="tab-usuarios" aria-controls="pan-usuarios" data-tab="usuarios" hidden>Usuarios</button>
-    <button class="tab" role="tab" id="tab-datos" aria-controls="pan-datos" data-tab="datos" hidden>Datos y GitHub</button>
-  </nav>
+    <div class="toolbar" id="toolbar">
+      <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="fBuscar" type="search" placeholder="Buscar por título, notas, origen o responsable" aria-label="Buscar por título, notas, origen o responsable"></div>
+      <select id="fDir" aria-label="Filtrar por dirección"></select>
+      <div class="chips" id="fEstado" role="group" aria-label="Filtrar por estado">
+        <button type="button" data-v="abiertas" aria-pressed="true">Abiertas</button>
+        <button type="button" data-v="vencidas" aria-pressed="false">Vencidas</button>
+        <button type="button" data-v="semana" aria-pressed="false">7 días</button>
+        <button type="button" data-v="cerradas" aria-pressed="false">Cerradas</button>
+        <button type="button" data-v="todas" aria-pressed="false">Todas</button>
+      </div>
+    </div>
 
-  <main id="main">
-    <section id="pan-actividades" role="tabpanel" aria-labelledby="tab-actividades" tabindex="0">
-      <div class="bar"><ul class="resumen" id="resAct"></ul>
-        <div class="bar-btns"><button class="btn" id="bResumen" type="button">Copiar resumen de la semana</button>
-        <button class="btn primary" data-act="new" data-tipo="actividad" data-escribe type="button">Nueva actividad</button></div></div>
-      <div class="board" id="board"></div>
-    </section>
-    <section id="pan-pagos" role="tabpanel" aria-labelledby="tab-pagos" tabindex="0" hidden>
-      <div class="bar"><ul class="resumen" id="resPag"></ul>
-        <div class="bar-btns"><a class="btn" href="/api/export.csv?tipo=pago" download>Exportar CSV</a>
-        <button class="btn primary" data-act="new" data-tipo="pago" data-escribe type="button">Nuevo pago</button></div></div>
-      <div class="board" id="boardPag"></div>
-    </section>
-    <section id="pan-confirmar" role="tabpanel" aria-labelledby="tab-confirmar" tabindex="0" hidden><div id="inbox"></div></section>
-    <section id="pan-usuarios" role="tabpanel" aria-labelledby="tab-usuarios" tabindex="0" hidden>
-      <div class="bar"><p class="hint">Cada persona entra con su correo y ve solo el panel de su dirección. Los administradores ven todo.</p>
-        <button class="btn primary" id="bNuevoUsuario" type="button">Nuevo usuario</button></div>
-      <div id="usuarios"></div>
-    </section>
-    <section id="pan-datos" role="tabpanel" aria-labelledby="tab-datos" tabindex="0" hidden><div id="datos"></div></section>
-  </main>
+    <main id="main">
+      <section id="pan-actividades" role="tabpanel" aria-labelledby="tab-actividades" tabindex="0">
+        <div class="bar"><ul class="resumen" id="resAct"></ul>
+          <div class="bar-btns"><button class="btn" id="bResumen" type="button">Copiar resumen de la semana</button>
+          <button class="btn primary" data-act="new" data-tipo="actividad" data-escribe type="button">Nueva actividad</button></div></div>
+        <div class="board" id="board"></div>
+      </section>
+      <section id="pan-pagos" role="tabpanel" aria-labelledby="tab-pagos" tabindex="0" hidden>
+        <div class="bar"><ul class="resumen" id="resPag"></ul>
+          <div class="bar-btns"><a class="btn" href="/api/export.csv?tipo=pago" download>Exportar CSV</a>
+          <button class="btn primary" data-act="new" data-tipo="pago" data-escribe type="button">Nuevo pago</button></div></div>
+        <div class="board" id="boardPag"></div>
+      </section>
+      <section id="pan-confirmar" role="tabpanel" aria-labelledby="tab-confirmar" tabindex="0" hidden><div id="inbox"></div></section>
+      <section id="pan-usuarios" role="tabpanel" aria-labelledby="tab-usuarios" tabindex="0" hidden>
+        <div class="bar"><p class="hint">Cada persona entra con su correo y ve solo el panel de su dirección. Los administradores ven todo.</p>
+          <button class="btn primary" id="bNuevoUsuario" type="button">Nuevo usuario</button></div>
+        <div id="usuarios"></div>
+      </section>
+      <section id="pan-datos" role="tabpanel" aria-labelledby="tab-datos" tabindex="0" hidden><div id="datos"></div></section>
+    </main>
+  </div>
 </div>
 
 <dialog id="dlg" aria-labelledby="dlgTitle" aria-modal="true">
