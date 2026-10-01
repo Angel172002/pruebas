@@ -84,8 +84,9 @@ function sinSesion() { S.user = null; S.rol = null; S.tasks = []; S.props = []; 
 function mostrar() {
   const u = S.user, forzar = Boolean(u?.must_change);
   $('#login').hidden = Boolean(u); $('#forzar').hidden = !forzar; $('#app').hidden = !u || forzar;
+  $('#fab').hidden = !u || forzar || S.rol === 'lector';
   if (!u) { $('#lErr').textContent = S.error && !S.cfg ? S.error : ''; $('#lCorreo').focus(); }
-  if (forzar) { $('#forzarCuerpo').replaceChildren(h('h1', { text: 'Crea tu clave' }), h('p', { class: 'auth-sub', text: `Hola, ${u.nombre}. Por seguridad debes cambiar la clave temporal antes de entrar.` }), formClave({ forzado: true, alOk: arrancar })); }
+  if (forzar) { $('#forzarCuerpo').replaceChildren(h('div', { class: 'auth-stripe', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')), h('h1', { text: 'Crea tu clave' }), h('p', { class: 'auth-sub', text: `Hola, ${u.nombre}. Por seguridad debes cambiar la clave temporal antes de entrar.` }), formClave({ forzado: true, alOk: arrancar })); }
 }
 
 /* ---------- filtros ---------- */
@@ -114,7 +115,12 @@ function render() {
   const foco = document.activeElement?.dataset?.id && { id: document.activeElement.dataset.id, act: document.activeElement.dataset.act };
   $('#hoy').textContent = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Bogota' }).replace(/^./, c => c.toUpperCase());
   const owner = S.rol === 'admin';
-  $('#quien').textContent = owner ? (S.user.nombre === ROLES.admin ? S.user.nombre : `${S.user.nombre} · ${ROLES.admin}`) : `${S.user.nombre} · ${S.user.area.replace(/^Dirección /, '')}`;
+  const rolTxt = owner ? (S.user.nombre === ROLES.admin ? 'Acceso total' : ROLES.admin) : S.user.area.replace(/^Dirección /, '');
+  $('#hNombre').textContent = S.user.nombre; $('#hRol').textContent = rolTxt;
+  $('#mNombre').textContent = S.user.nombre; $('#mCorreo').textContent = S.user.email;
+  $('#avatar').textContent = S.user.nombre.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
+  $('#toolbar').hidden = !['actividades', 'pagos'].includes(S.ui.tab);
+  document.querySelectorAll('#fEstado button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === S.ui.estado)));
   for (const id of ['pagos', 'confirmar', 'usuarios', 'datos']) $('#tab-' + id).hidden = !owner;
   if (!owner && S.ui.tab !== 'actividades') S.ui.tab = 'actividades';
   document.querySelectorAll('.tab').forEach(t => { const sel = t.dataset.tab === S.ui.tab; t.setAttribute('aria-selected', String(sel)); t.tabIndex = sel ? 0 : -1; });
@@ -409,8 +415,26 @@ $('.tabs').addEventListener('keydown', e => {
   e.preventDefault(); irPestana(vis[i].dataset.tab); vis[i].focus();
 });
 $('#fDir').addEventListener('change', e => { S.ui.dir = e.target.value; try { localStorage.setItem('liva-dir', S.ui.dir); } catch {} render(); });
-$('#fEstado').addEventListener('change', e => { S.ui.estado = e.target.value; render(); });
+$('#fEstado').addEventListener('click', e => { const b = e.target.closest('button[data-v]'); if (b) { S.ui.estado = b.dataset.v; render(); } });
 let debounce; $('#fBuscar').addEventListener('input', e => { clearTimeout(debounce); debounce = setTimeout(() => { S.ui.q = e.target.value; render(); }, 150); });
+/* Menú de usuario */
+const menu = $('#menuUsuario'), bUsuario = $('#bUsuario');
+function cerrarMenu(devolverFoco) { menu.hidden = true; bUsuario.setAttribute('aria-expanded', 'false'); if (devolverFoco) bUsuario.focus(); }
+bUsuario.addEventListener('click', e => {
+  e.stopPropagation(); const abrirlo = menu.hidden;
+  menu.hidden = !abrirlo; bUsuario.setAttribute('aria-expanded', String(abrirlo));
+  if (abrirlo) menu.querySelector('button').focus();
+});
+document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target)) cerrarMenu(false); });
+menu.addEventListener('click', () => cerrarMenu(false));
+menu.addEventListener('keydown', e => {
+  const items = [...menu.querySelectorAll('button')], i = items.indexOf(document.activeElement);
+  if (e.key === 'Escape') { e.preventDefault(); cerrarMenu(true); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+  else if (e.key === 'Tab') cerrarMenu(false);
+});
+
 $('#bTema').addEventListener('click', () => {
   const r = document.documentElement, oscuro = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   r.dataset.theme = oscuro ? 'light' : 'dark'; try { localStorage.setItem('liva-tema', r.dataset.theme); } catch {}
@@ -441,7 +465,7 @@ document.addEventListener('keydown', e => {
   if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return;
   e.preventDefault(); abrir(S.ui.tab === 'pagos' && S.rol === 'admin' ? 'pago' : 'actividad', null, 'urgente');
 });
-document.body.append(h('button', { class: 'fab', type: 'button', 'aria-label': 'Nueva actividad', text: '+', onclick: () => esEscritor() && !dlg.open && abrir(S.ui.tab === 'pagos' && S.rol === 'admin' ? 'pago' : 'actividad', null, 'urgente') }));
+document.body.append(h('button', { class: 'fab', id: 'fab', hidden: true, type: 'button', 'aria-label': 'Nueva actividad', text: '+', onclick: () => esEscritor() && !dlg.open && abrir(S.ui.tab === 'pagos' && S.rol === 'admin' ? 'pago' : 'actividad', null, 'urgente') }));
 
 /* ---------- diálogo genérico, cambio de clave y usuarios ---------- */
 const gen = $('#dlgGen');
