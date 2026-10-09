@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matriz Insolvencia 2026</title>
+<style>
+:root{
+  --bg:#f5f6f8;--card:#fff;--ink:#1c2230;--mute:#6b7385;--line:#e4e7ee;
+  --brand:#1f4fd8;--brand-soft:#e8eefc;
+  --ok:#14804a;--ok-soft:#e3f5ea;--warn:#a56300;--warn-soft:#fdf1d9;--bad:#c0322b;--bad-soft:#fbe6e4;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#12151c;--card:#1a1f2a;--ink:#e8ebf2;--mute:#8d96a9;--line:#2a3141;
+  --brand:#7ea1ff;--brand-soft:#212c4d;
+  --ok:#5bd394;--ok-soft:#173326;--warn:#f0b64c;--warn-soft:#38300f;--bad:#ff8b84;--bad-soft:#3d1c1a;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:20px 16px 8px;max-width:1100px;margin:0 auto}
+h1{margin:0;font-size:20px}
+header p{margin:2px 0 0;color:var(--mute);font-size:13px}
+main{max-width:1100px;margin:0 auto;padding:8px 16px 40px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.kpi small{color:var(--mute);display:block;font-size:12px}
+.kpi b{font-size:19px}
+.kpi.bad b{color:var(--bad)}
+.bar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+.bar input,.bar select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.bar input{flex:1 1 260px;min-width:0}
+.bar input:focus,.bar select:focus{outline:2px solid var(--brand);border-color:transparent}
+.layout{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+@media(min-width:900px){.layout{grid-template-columns:minmax(0,400px) minmax(0,1fr)}}
+.list{display:flex;flex-direction:column;gap:8px}
+.row{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%}
+.row:hover{border-color:var(--brand)}
+.row.sel{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-soft)}
+.row .top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.row .sub{color:var(--mute);font-size:12.5px;margin-top:2px}
+.chip{font-size:12px;border-radius:99px;padding:2px 9px;white-space:nowrap;font-weight:600}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.bad{background:var(--bad-soft);color:var(--bad)}
+.chip.info{background:var(--brand-soft);color:var(--brand)}
+.prog{height:6px;background:var(--line);border-radius:9px;margin-top:8px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--brand)}
+.detail{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+.detail h2{margin:0 0 2px;font-size:18px}
+.empty{color:var(--mute);text-align:center;padding:40px 10px}
+.sec{margin-top:18px}
+.sec h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);margin:0 0 8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.f{background:var(--bg);border-radius:10px;padding:9px 11px}
+.f small{display:block;color:var(--mute);font-size:12px}
+.f b{font-size:15px}
+.f.bad b{color:var(--bad)}
+.months{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+@media(min-width:600px){.months{grid-template-columns:repeat(12,1fr)}}
+.m{background:var(--bg);border-radius:8px;padding:6px 2px;text-align:center;font-size:11px;color:var(--mute)}
+.m b{display:block;color:var(--ink);font-size:11.5px;margin-top:2px}
+.m.paid{background:var(--ok-soft)}.m.paid b{color:var(--ok)}
+.note{color:var(--mute);font-size:12px;margin-top:20px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Matriz de Clientes · Ley de Insolvencia 2026</h1>
+  <p>Prototipo con datos de ejemplo. Busque por cédula o nombre.</p>
+</header>
+<main>
+  <section class="kpis" id="kpis"></section>
+  <div class="bar">
+    <input id="q" type="search" inputmode="search" placeholder="🔎 Buscar por cédula o nombre…" autofocus>
+    <select id="fAsesor"><option value="">Todos los asesores</option></select>
+    <select id="fAlerta">
+      <option value="">Todas las alertas</option>
+      <option value="bad">🔴 En mora / sin pago</option>
+      <option value="warn">🟡 Atención</option>
+      <option value="ok">🟢 Al día</option>
+    </select>
+  </div>
+  <div class="layout">
+    <div class="list" id="list"></div>
+    <div class="detail" id="detail"></div>
+  </div>
+  <p class="note">Todos los nombres, cédulas y montos son ficticios y solo sirven para demostrar el diseño.</p>
+</main>
+
+<script>
+/* Un cliente = una fila de MATRIZ CLIENTES. "flujo" = pagos de 2026 por mes (hoja FLUJO POR CLIENTE). */
+const CLIENTES = [
+ {n:"001",cedula:"1.000.000.001",nombre:"Cliente Demo A",asesor:"Asesor Uno",ingreso:"05/03/2026",estado:"A. Inicio",
+  deuda:90000000,priorizada:27000000,cuotas:6,cuotaMes:1000000,centro:2225000,sede:"Sede Centro",
+  honorarios:1200000,bonif:300000,gAdmin:200000,gAdq:500000,contrato:11000000,recibido:3000000,
+  inicioPagos:"15/07/2026",pagadas:2,esperadas:3,enMora:1,valorMora:1000000,dias:30,restantes:4,fin:"15/01/2027",
+  flujo:{MAR:3000000}},
+ {n:"002",cedula:"1.000.000.002",nombre:"Cliente Demo B",asesor:"Asesor Dos",ingreso:"",estado:"A. Inicio",
+  deuda:75000000,priorizada:22500000,cuotas:5,cuotaMes:1500000,centro:2225000,sede:"Sede Centro",
+  honorarios:1200000,bonif:300000,gAdmin:200000,gAdq:500000,contrato:11000000,recibido:1500000,
+  inicioPagos:"15/07/2026",pagadas:0,esperadas:3,enMora:3,valorMora:4500000,dias:90,restantes:5,fin:"15/12/2026",
+  flujo:{MAR:500000,JUN:300000,AGO:700000}},
+ {n:"003",cedula:"1.000.000.003",nombre:"Cliente Demo C",asesor:"Asesor Dos",ingreso:"",estado:"A. Aprobado",
+  deuda:225000000,priorizada:60000000,cuotas:15,cuotaMes:800000,centro:5000000,sede:"",
+  honorarios:1200000,bonif:300000,gAdmin:200000,gAdq:500000,contrato:15000000,recibido:0,
+  inicioPagos:"15/07/2026",pagadas:0,esperadas:3,enMora:3,valorMora:2400000,dias:90,restantes:15,fin:"15/10/2027",
+  flujo:{}},
+ {n:"004",cedula:"1.000.000.004",nombre:"Cliente Demo D",asesor:"Asesor Uno",ingreso:"12/04/2026",estado:"A. Inicio",
+  deuda:55000000,priorizada:16500000,cuotas:8,cuotaMes:900000,centro:2225000,sede:"Sede Centro",
+  honorarios:1200000,bonif:300000,gAdmin:200000,gAdq:500000,contrato:9000000,recibido:5400000,
+  inicioPagos:"15/07/2026",pagadas:3,esperadas:3,enMora:0,valorMora:0,dias:0,restantes:5,fin:"15/03/2027",
+  flujo:{ABR:1800000,JUL:900000,AGO:900000,SEP:900000,OCT:900000}},
+ {n:"005",cedula:"1.000.000.005",nombre:"Cliente Demo E",asesor:"Asesor Dos",ingreso:"20/05/2026",estado:"A. Aprobado",
+  deuda:120000000,priorizada:36000000,cuotas:10,cuotaMes:1100000,centro:3000000,sede:"Sede Centro",
+  honorarios:1200000,bonif:300000,gAdmin:200000,gAdq:500000,contrato:12000000,recibido:3300000,
+  inicioPagos:"15/07/2026",pagadas:2,esperadas:3,enMora:1,valorMora:1100000,dias:30,restantes:8,fin:"15/05/2027",
+  flujo:{JUL:1100000,AGO:1100000,SEP:1100000}}
+];
+const MESES=["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
+
+const cop=v=>(v<0?"-":"")+"$"+Math.abs(v).toLocaleString("es-CO");
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const digits=s=>s.replace(/\D/g,"");
+
+// Campos derivados (mismas fórmulas de la hoja)
+CLIENTES.forEach(c=>{
+  c.saldo=c.contrato-c.recibido;
+  c.cumpl=c.contrato?c.recibido/c.contrato:0;
+  c.neto=c.recibido-c.honorarios-c.bonif-c.gAdmin-c.gAdq-c.centro; // aprox. (la hoja usa Q-M-N-O)
+  c.alerta=c.recibido===0?{k:"bad",t:"🔴 Sin pago"}:c.enMora>0?{k:c.dias>=60?"bad":"warn",t:(c.dias>=60?"🔴":"🟡")+" En mora"}:{k:"ok",t:"🟢 Al día"};
+});
+
+let selId=null;
+
+function kpis(list){
+  const sum=k=>list.reduce((a,c)=>a+c[k],0);
+  const tot=sum("contrato"),rec=sum("recibido");
+  const items=[
+    ["Clientes activos",list.length],["Total a cobrar",cop(tot)],["Total recibido",cop(rec)],
+    ["Saldo por cobrar",cop(tot-rec)],["Mora acumulada",cop(sum("valorMora")),"bad"],
+    ["% recuperación",tot?(rec/tot*100).toFixed(1)+"%":"-"]];
+  $("kpis").innerHTML=items.map(([l,v,c])=>`<div class="kpi ${c||""}"><small>${l}</small><b>${v}</b></div>`).join("");
+}
+
+function filtrar(){
+  const q=$("q").value.trim().toLowerCase(),qd=digits(q);
+  return CLIENTES.filter(c=>
+    (!q||c.nombre.toLowerCase().includes(q)||(qd&&digits(c.cedula).includes(qd))||c.n.includes(q)) &&
+    (!$("fAsesor").value||c.asesor===$("fAsesor").value) &&
+    (!$("fAlerta").value||c.alerta.k===$("fAlerta").value));
+}
+
+function renderList(){
+  const l=filtrar();
+  kpis(l);
+  $("list").innerHTML=l.length?l.map(c=>`
+    <button class="row ${c.n===selId?"sel":""}" data-n="${c.n}">
+      <div class="top"><b>${esc(c.nombre)}</b><span class="chip ${c.alerta.k}">${c.alerta.t}</span></div>
+      <div class="sub">CC ${esc(c.cedula)} · ${esc(c.asesor)}</div>
+      <div class="prog"><i style="width:${Math.round(c.cumpl*100)}%"></i></div>
+    </button>`).join(""):`<div class="empty">Sin resultados</div>`;
+  if(l.length&&!l.some(c=>c.n===selId)&&($("q").value||!selId)) select(l[0].n,false);
+  if(!l.length) $("detail").innerHTML=`<div class="empty">Ningún cliente coincide con la búsqueda.</div>`;
+}
+
+const F=(l,v,cls="")=>`<div class="f ${cls}"><small>${l}</small><b>${v}</b></div>`;
+
+function select(n,rerender=true){
+  selId=n;
+  const c=CLIENTES.find(x=>x.n===n);
+  if(rerender) renderList();
+  $("detail").innerHTML=`
+    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:start">
+      <div><h2>${esc(c.nombre)}</h2><div style="color:var(--mute)">CC ${esc(c.cedula)} · N° ${c.n} · Asesor: ${esc(c.asesor)}</div></div>
+      <div><span class="chip info">${esc(c.estado)}</span> <span class="chip ${c.alerta.k}">${c.alerta.t}</span></div>
+    </div>
+    <div class="sec"><h3>Cobros y saldos · ${(c.cumpl*100).toFixed(1)}% cumplimiento</h3>
+      <div class="prog" style="height:10px;margin:0 0 10px"><i style="width:${Math.round(c.cumpl*100)}%"></i></div>
+      <div class="grid">${F("Total contrato",cop(c.contrato))}${F("Recibido",cop(c.recibido))}${F("Saldo por cobrar",cop(c.saldo))}${F("Cuota mensual",cop(c.cuotaMes))}</div></div>
+    <div class="sec"><h3>Mora</h3>
+      <div class="grid">${F("Cuotas pagadas / esperadas",c.pagadas+" / "+c.esperadas)}${F("Cuotas en mora",c.enMora,c.enMora?"bad":"")}${F("Valor en mora",cop(c.valorMora),c.valorMora?"bad":"")}${F("Días en mora",c.dias,c.dias?"bad":"")}</div></div>
+    <div class="sec"><h3>Pagos 2026</h3>
+      <div class="months">${MESES.map(m=>`<div class="m ${c.flujo[m]?"paid":""}">${m}<b>${c.flujo[m]?(c.flujo[m]/1e6).toFixed(2)+"M":"–"}</b></div>`).join("")}</div></div>
+    <div class="sec"><h3>Proceso y deuda</h3>
+      <div class="grid">${F("Fecha ingreso",c.ingreso||"—")}${F("Deuda declarada",cop(c.deuda))}${F("Deuda priorizada (30%)",cop(c.priorizada))}${F("N° cuotas",c.cuotas)}${F("Inicio de pagos",c.inicioPagos)}${F("Finalización estimada",c.fin)}${F("Cuotas restantes",c.restantes)}</div></div>
+    <div class="sec"><h3>Costos y rentabilidad</h3>
+      <div class="grid">${F("Centro de conciliación",cop(c.centro)+(c.sede?" · "+esc(c.sede):""))}${F("Honorarios abogado",cop(c.honorarios))}${F("Bonificación asesor",cop(c.bonif))}${F("Gastos admin/notariales",cop(c.gAdmin))}${F("Gastos adquisición",cop(c.gAdq))}${F("Resultado a la fecha",cop(c.neto),c.neto<0?"bad":"")}</div></div>`;
+}
+
+[...new Set(CLIENTES.map(c=>c.asesor))].forEach(a=>$("fAsesor").add(new Option(a,a)));
+$("q").addEventListener("input",renderList);
+$("fAsesor").addEventListener("change",renderList);
+$("fAlerta").addEventListener("change",renderList);
+$("list").addEventListener("click",e=>{const b=e.target.closest(".row");if(b)select(b.dataset.n)});
+renderList();
+</script>
+</body>
+</html>
