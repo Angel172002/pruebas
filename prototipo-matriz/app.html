@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matriz Insolvencia · Aplicativo</title>
+<style>
+:root{
+  --bg:#f3f4f7;--card:#fff;--ink:#1a2030;--ink2:#555e72;--mute:#8a92a5;--line:#e3e6ed;--soft:#f3f4f7;
+  --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;
+  --ok:#14804a;--ok-bg:#e1f4e9;--warn:#9a5c00;--warn-bg:#fcefd2;--bad:#c0322b;--bad-bg:#fbe5e3;--info:#2a5fc4;--info-bg:#e6edfb;
+  --side:#161b29;--side-ink:#aab2c8;--side-act:#fff;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0f1218;--card:#181d28;--ink:#e9ecf3;--ink2:#b5bccd;--mute:#7f889d;--line:#283042;--soft:#202736;
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;
+  --ok:#5bd394;--ok-bg:#16322483;--warn:#f0b64c;--warn-bg:#3a3110;--bad:#ff8b84;--bad-bg:#3d1c1a;--info:#8fb0ff;--info-bg:#1f2b4d;
+  --side:#0b0e14;
+}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14.5px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--s1);text-decoration:none;cursor:pointer}
+/* shell */
+.shell{display:grid;grid-template-columns:1fr;min-height:100vh}
+@media(min-width:960px){.shell{grid-template-columns:230px 1fr}}
+.side{background:var(--side);color:var(--side-ink);padding:14px 12px;display:flex;flex-direction:column;gap:6px}
+@media(min-width:960px){.side{position:sticky;top:0;height:100vh}}
+.brand{color:#fff;font-weight:700;font-size:15px;padding:6px 8px 12px;display:flex;gap:8px;align-items:center}
+.brand i{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--s1);font-style:normal}
+nav{display:flex;gap:4px;overflow-x:auto}
+@media(min-width:960px){nav{flex-direction:column}}
+nav a{color:var(--side-ink);padding:9px 11px;border-radius:9px;white-space:nowrap;display:flex;gap:9px;align-items:center}
+nav a:hover{background:#ffffff12}
+nav a.on{background:var(--s1);color:#fff}
+.side .foot{margin-top:auto;font-size:11.5px;padding:8px;display:none}
+@media(min-width:960px){.side .foot{display:block}}
+.main{min-width:0}
+.top{display:flex;gap:10px;align-items:center;padding:12px 16px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.search{position:relative;flex:1;max-width:520px}
+.search input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--soft)}
+.search input:focus{outline:2px solid var(--s1);border-color:transparent;background:var(--card)}
+.drop{position:absolute;left:0;right:0;top:44px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px #0003;overflow:hidden;display:none}
+.drop a{display:block;padding:9px 12px;color:var(--ink);border-bottom:1px solid var(--line)}
+.drop a:hover{background:var(--soft)}
+.drop small{color:var(--mute)}
+.page{padding:16px;max-width:1280px}
+h1{font-size:21px;margin:0}
+h2{font-size:15px;margin:0 0 10px}
+.sub{color:var(--mute);margin:2px 0 14px;font-size:13px}
+.hd{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px}
+/* components */
+.grid{display:grid;gap:12px}
+.g-kpi{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.g-2{grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:0}
+.kpi small{color:var(--mute);display:block;font-size:12px}
+.kpi b{font-size:22px;display:block;margin-top:2px}
+.kpi em{font-style:normal;font-size:12px;color:var(--mute)}
+.kpi.bad b{color:var(--bad)}.kpi.ok b{color:var(--ok)}
+.chip{display:inline-block;font-size:12px;font-weight:600;border-radius:99px;padding:2px 9px;white-space:nowrap}
+.chip.ok{background:var(--ok-bg);color:var(--ok)}.chip.warn{background:var(--warn-bg);color:var(--warn)}
+.chip.bad{background:var(--bad-bg);color:var(--bad)}.chip.info{background:var(--info-bg);color:var(--info)}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:8px 13px;cursor:pointer}
+.btn:hover{border-color:var(--s1)}
+.btn.pri{background:var(--s1);border-color:var(--s1);color:#fff;font-weight:600}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.bar input,.bar select,.form input,.form select,.form textarea{padding:9px 11px;border-radius:10px;border:1px solid var(--line);background:var(--card)}
+.bar input{flex:1 1 220px;min-width:0}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+table{border-collapse:collapse;width:100%;min-width:760px}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--card)}
+td{padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+tbody tr.click{cursor:pointer}tbody tr.click:hover td{background:var(--soft)}
+td.r,th.r{text-align:right}
+.mut{color:var(--mute)}.neg{color:var(--bad)}
+.prog{height:7px;background:var(--line);border-radius:9px;overflow:hidden;min-width:70px}
+.prog i{display:block;height:100%;background:var(--s1);border-radius:9px}
+.f{background:var(--soft);border-radius:10px;padding:9px 11px}
+.f small{display:block;color:var(--mute);font-size:12px}.f b{font-size:15px}
+.g-f{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.legend{display:flex;gap:14px;font-size:12.5px;color:var(--ink2);margin:0 0 6px;flex-wrap:wrap}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--c);margin-right:6px;vertical-align:-1px}
+svg text{fill:var(--mute);font-size:11px}
+svg .gl{stroke:var(--line)}
+[data-tip]{cursor:default}
+#tip{position:fixed;pointer-events:none;background:#111827;color:#fff;font-size:12px;padding:6px 9px;border-radius:8px;z-index:50;display:none;max-width:260px;box-shadow:0 6px 18px #0005}
+.stack{display:flex;height:16px;border-radius:9px;overflow:hidden;gap:2px;margin:6px 0 10px}
+.stack i{display:block;min-width:4px}
+.list-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);align-items:center}
+.list-row:last-child{border:0}
+.cuotas{display:flex;flex-wrap:wrap;gap:5px}
+.q{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--soft);color:var(--mute)}
+.q.paid{background:var(--ok-bg);color:var(--ok)}.q.late{background:var(--bad-bg);color:var(--bad)}
+.heat td{text-align:center;padding:8px 6px;font-size:12px}
+.heat td.n{text-align:left}
+.form{display:grid;gap:12px;max-width:520px}
+.form label{display:grid;gap:5px;font-size:13px;color:var(--ink2)}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ok);color:#fff;padding:10px 16px;border-radius:10px;z-index:60;display:none}
+.crumb{font-size:13px;color:var(--mute);margin-bottom:8px}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="brand"><i>⚖</i> Insolvencia 2026</div>
+    <nav id="nav"></nav>
+    <div class="foot">Datos ficticios de demostración.<br>Los pagos que registre se guardan solo en este navegador.</div>
+  </aside>
+  <div class="main">
+    <div class="top">
+      <div class="search">
+        <input id="gs" type="search" placeholder="🔎 Buscar cliente por cédula o nombre…" autocomplete="off">
+        <div class="drop" id="drop"></div>
+      </div>
+      <button class="btn pri" onclick="go('#/pago')">+ Registrar pago</button>
+    </div>
+    <div class="page" id="view"></div>
+  </div>
+</div>
+<div id="tip"></div><div class="toast" id="toast"></div>
+
+<script>
+/* ================= DATOS FICTICIOS ================= */
+const HOY=new Date(2026,9,9);
+const MES=["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
+const ASESORES=[{id:"A1",nombre:"Laura Méndez",color:"var(--s1)"},{id:"A2",nombre:"Carlos Rojas",color:"var(--s2)"},{id:"A3",nombre:"Diana Pardo",color:"var(--s3)"}];
+const NOMBRES=["Marta Quintero","Julián Cárdenas","Sofía Beltrán","Andrés Pineda","Luisa Moreno","Hernán Acosta","Paola Rincón","Camilo Vargas","Daniela Ortiz","Fabián Suárez","Natalia Gómez","Ricardo Peña","Viviana Torres","Mauricio León","Ángela Duarte","Sergio Herrera","Catalina Ruiz","Iván Salazar","Yolanda Castro","Jorge Medina","Patricia Lozano"];
+const ESTADOS=["A. Inicio","A. Aprobado","En audiencia"];
+const SEDES=["Sede Centro","Sede Norte","Sede Sur"];
+const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const pd=s=>{const[a,b,c]=s.split("-").map(Number);return new Date(a,b-1,c)};
+const addM=(d,k)=>new Date(d.getFullYear(),d.getMonth()+k,d.getDate());
+const fdate=s=>s?s.split("-").reverse().join("/"):"—";
+let seed=7;const rnd=()=>(seed=(seed*1664525+1013904223)%4294967296)/4294967296;
+const CL=[],PAGOS0=[];
+NOMBRES.forEach((nombre,i)=>{
+  const cuotas=[5,6,8,10,12,15][Math.floor(rnd()*6)];
+  const cuotaMes=Math.round((600000+rnd()*1400000)/10000)*10000;
+  const ingreso=new Date(2026,1+Math.floor(rnd()*4),1+Math.floor(rnd()*27));
+  const inicio=new Date(2026,ingreso.getMonth()+2,15);
+  const deuda=Math.round((40+rnd()*200)*1e6/1e5)*1e5;
+  const perfil=rnd(); // <.5 cumplido, <.8 irregular, resto moroso
+  const c={n:String(i+1).padStart(3,"0"),cedula:String(10000000+Math.floor(rnd()*89000000)),nombre,
+    asesor:ASESORES[i%3].id,ingreso:iso(ingreso),inicio:iso(inicio),estado:ESTADOS[Math.floor(rnd()*3)],
+    deuda,priorizada:Math.round(deuda*0.3),cuotas,cuotaMes,sede:SEDES[Math.floor(rnd()*3)],
+    centro:[2225000,3000000,5000000][Math.floor(rnd()*3)],honorarios:1200000,bonif:300000,gAdmin:200000,gAdq:500000,
+    tel:"3"+String(100000000+Math.floor(rnd()*89999999))};
+  CL.push(c);
+  if(rnd()>.25)PAGOS0.push({n:c.n,f:iso(ingreso),v:Math.round(cuotaMes*(.4+rnd()*.8)/10000)*10000,nota:"Anticipo"});
+  const p=perfil<.5?.95:perfil<.8?.55:.12;
+  for(let k=0;k<cuotas;k++){const d=addM(inicio,k);if(d>HOY)break;
+    if(rnd()<p)PAGOS0.push({n:c.n,f:iso(addM(d,Math.floor(rnd()*6)-2)),v:rnd()<.85?cuotaMes:Math.round(cuotaMes*.5/10000)*10000,nota:"Cuota"});}
+});
+let EXTRA=[];try{EXTRA=JSON.parse(localStorage.getItem("mi_pagos_v1")||"[]")}catch(e){}
+const pagos=()=>PAGOS0.concat(EXTRA);
+
+/* ================= CÁLCULOS ================= */
+const cop=v=>(v<0?"-":"")+"$"+Math.abs(Math.round(v)).toLocaleString("es-CO");
+const M=v=>(v/1e6).toFixed(1).replace(".",",")+" M";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ase=id=>ASESORES.find(a=>a.id===id);
+function derive(){
+  const all=pagos();
+  CL.forEach(c=>{
+    c.pagos=all.filter(p=>p.n===c.n).sort((a,b)=>a.f<b.f?1:-1);
+    c.contrato=c.cuotaMes*c.cuotas;
+    c.recibido=c.pagos.reduce((a,p)=>a+p.v,0);
+    c.saldo=Math.max(0,c.contrato-c.recibido);
+    c.cumpl=c.contrato?Math.min(1,c.recibido/c.contrato):0;
+    const ini=pd(c.inicio);let esp=0;
+    for(let k=0;k<c.cuotas;k++)if(addM(ini,k)<=HOY)esp++;
+    c.esperadas=esp;
+    c.pagadas=Math.min(c.cuotas,Math.floor(c.recibido/c.cuotaMes));
+    c.valorMora=Math.max(0,esp*c.cuotaMes-c.recibido);
+    c.enMora=Math.ceil(c.valorMora/c.cuotaMes);
+    c.dias=c.enMora?Math.max(0,Math.round((HOY-addM(ini,c.pagadas))/864e5)):0;
+    c.restantes=c.cuotas-c.pagadas;
+    c.fin=iso(addM(ini,c.cuotas-1));
+    c.costos=c.centro+c.honorarios+c.bonif+c.gAdmin+c.gAdq;
+    c.neto=c.recibido-c.costos;
+    c.alerta=c.pagadas>=c.cuotas?{k:"info",t:"Finalizado"}:
+      c.recibido===0&&c.esperadas>0?{k:"bad",t:"🔴 Sin pago"}:
+      c.dias>=60?{k:"bad",t:"🔴 Mora grave"}:c.dias>0?{k:"warn",t:"🟡 En mora"}:{k:"ok",t:"🟢 Al día"};
+  });
+}
+function porMes(list,year=2026){
+  const rec=Array(12).fill(0),esp=Array(12).fill(0);
+  list.forEach(c=>{c.pagos.forEach(p=>{const d=pd(p.f);if(d.getFullYear()===year)rec[d.getMonth()]+=p.v});
+    const ini=pd(c.inicio);for(let k=0;k<c.cuotas;k++){const d=addM(ini,k);if(d.getFullYear()===year&&d<=HOY)esp[d.getMonth()]+=c.cuotaMes}});
+  return{rec,esp};
+}
+const sum=(l,k)=>l.reduce((a,c)=>a+c[k],0);
+
+/* ================= GRÁFICOS (SVG) ================= */
+function barChart(labels,rec,esp,h=210){
+  const W=640,L=44,B=24,T=10,iw=W-L-6,ih=h-B-T;
+  const max=Math.max(1,...rec,...esp),top=Math.ceil(max/1e6/ (max>8e6?2:1))*(max>8e6?2:1)*1e6;
+  const bw=iw/labels.length;let s=`<svg viewBox="0 0 ${W} ${h}" width="100%" role="img" aria-label="Recaudo mensual">`;
+  for(let i=0;i<=3;i++){const y=T+ih-ih*i/3;s+=`<line class="gl" x1="${L}" x2="${W-6}" y1="${y}" y2="${y}"/><text x="${L-6}" y="${y+4}" text-anchor="end">${(top*i/3/1e6).toFixed(0)}M</text>`}
+  labels.forEach((l,i)=>{const x=L+i*bw,bh=ih*rec[i]/top,y=T+ih-bh;
+    s+=`<rect data-tip="${l}: recibido ${cop(rec[i])} · esperado ${cop(esp[i])}" x="${x+bw*.22}" y="${y}" width="${bw*.56}" height="${Math.max(0,bh)}" rx="4" fill="var(--s1)"/>`;
+    if(esp[i]){const ey=T+ih-ih*esp[i]/top;s+=`<line x1="${x+bw*.1}" x2="${x+bw*.9}" y1="${ey}" y2="${ey}" stroke="var(--s2)" stroke-width="2.5" stroke-linecap="round"/>`}
+    s+=`<text x="${x+bw/2}" y="${h-7}" text-anchor="middle">${l}</text>`});
+  return s+"</svg>";
+}
+function hBars(items,fmt){ // [{l,v,c}]
+  const max=Math.max(1,...items.map(i=>i.v));
+  return items.map(i=>`<div style="margin:9px 0" data-tip="${esc(i.l)}: ${fmt(i.v)}"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(i.l)}</span><b>${fmt(i.v)}</b></div><div class="prog" style="height:10px;margin-top:4px"><i style="width:${i.v/max*100}%;background:${i.c||"var(--s1)"}"></i></div></div>`).join("");
+}
+const chip=a=>`<span class="chip ${a.k}">${a.t}</span>`;
+const F=(l,v,c="")=>`<div class="f"><small>${l}</small><b class="${c}">${v}</b></div>`;
+const KPI=(l,v,sub="",c="")=>`<div class="card kpi ${c}"><small>${l}</small><b>${v}</b><em>${sub}</em></div>`;
+
+/* ================= VISTAS ================= */
+const V={};
+V.resumen=()=>{
+  const act=CL.filter(c=>c.alerta.k!=="info"),tot=sum(CL,"contrato"),rec=sum(CL,"recibido");
+  const {rec:r,esp:e}=porMes(CL);
+  const cnt=k=>CL.filter(c=>c.alerta.k===k).length;
+  const seg=[["ok","Al día","var(--ok)"],["warn","En mora","var(--warn)"],["bad","Mora grave / sin pago","var(--bad)"],["info","Finalizados","var(--info)"]];
+  const top=[...CL].filter(c=>c.valorMora>0).sort((a,b)=>b.valorMora-a.valorMora).slice(0,5);
+  return`<div class="hd"><div><h1>Resumen general</h1><div class="sub">Estado de la cartera al ${HOY.toLocaleDateString("es-CO")}</div></div></div>
+  <div class="grid g-kpi">
+   ${KPI("Clientes activos",act.length,"de "+CL.length+" en cartera")}
+   ${KPI("Total a cobrar",cop(tot),"contratos vigentes")}
+   ${KPI("Total recibido",cop(rec),(rec/tot*100).toFixed(1)+"% recuperado","ok")}
+   ${KPI("Saldo por cobrar",cop(tot-rec),"pendiente")}
+   ${KPI("Mora acumulada",cop(sum(CL,"valorMora")),CL.filter(c=>c.valorMora>0).length+" clientes en mora","bad")}
+   ${KPI("Deuda total cartera",cop(sum(CL,"deuda")),"declarada por clientes")}
+  </div>
+  <div class="grid g-2" style="margin-top:12px">
+   <div class="card"><h2>Recaudo mensual 2026</h2>
+     <div class="legend"><span style="--c:var(--s1)">Recibido</span><span style="--c:var(--s2)">Esperado (cuotas del mes)</span></div>${barChart(MES,r,e)}</div>
+   <div class="card"><h2>Salud de la cartera</h2>
+     <div class="stack">${seg.map(([k,,c])=>cnt(k)?`<i data-tip="${cnt(k)} clientes" style="flex:${cnt(k)};background:${c}"></i>`:"").join("")}</div>
+     ${seg.map(([k,l,c])=>`<div class="list-row"><span><span class="chip ${k}">${l}</span></span><b>${cnt(k)}</b></div>`).join("")}
+   </div>
+   <div class="card"><h2>Recaudo por asesor</h2>${hBars(ASESORES.map(a=>({l:a.nombre,v:sum(CL.filter(c=>c.asesor===a.id),"recibido"),c:a.color})),cop)}
+     <a onclick="go('#/asesores')">Ver asesores →</a></div>
+   <div class="card"><h2>Mayores moras</h2>${top.map(c=>`<div class="list-row"><a onclick="go('#/cliente/${c.n}')">${esc(c.nombre)}<br><small class="mut">CC ${c.cedula} · ${c.dias} días</small></a><b class="neg">${cop(c.valorMora)}</b></div>`).join("")||'<div class="mut">Sin mora 🎉</div>'}
+     <a onclick="go('#/cobranza')">Ir a cobranza →</a></div>
+  </div>`;
+};
+
+let sortK="n",sortD=1,fil={q:"",asesor:"",alerta:"",estado:""};
+const COLS=[["n","N°"],["nombre","Cliente"],["asesor","Asesor"],["estado","Estado"],["contrato","Contrato",1],["recibido","Recibido",1],["saldo","Saldo",1],["cumpl","% Cumpl.",1],["valorMora","En mora",1],["alerta","Alerta"]];
+function filtrados(list=CL){
+  const q=fil.q.toLowerCase(),qd=q.replace(/\D/g,"");
+  return list.filter(c=>(!q||c.nombre.toLowerCase().includes(q)||(qd&&c.cedula.includes(qd))||c.n===q)&&(!fil.asesor||c.asesor===fil.asesor)&&(!fil.alerta||c.alerta.k===fil.alerta)&&(!fil.estado||c.estado===fil.estado));
+}
+function tabla(list,compact){
+  const rows=[...list].sort((a,b)=>{const x=sortK==="alerta"?a.alerta.t:a[sortK],y=sortK==="alerta"?b.alerta.t:b[sortK];return(x>y?1:x<y?-1:0)*sortD});
+  return`<div class="tw"><table><thead><tr>${COLS.map(([k,l,r])=>`<th class="${r?"r":""}" onclick="sortBy('${k}')">${l}${sortK===k?(sortD>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>
+  ${rows.map(c=>`<tr class="click" onclick="go('#/cliente/${c.n}')"><td class="mut">${c.n}</td><td><b>${esc(c.nombre)}</b><br><small class="mut">CC ${c.cedula}</small></td><td>${esc(ase(c.asesor).nombre)}</td><td>${c.estado}</td>
+  <td class="r">${cop(c.contrato)}</td><td class="r">${cop(c.recibido)}</td><td class="r">${cop(c.saldo)}</td>
+  <td class="r"><div style="display:flex;gap:8px;align-items:center;justify-content:flex-end"><div class="prog" style="width:60px"><i style="width:${c.cumpl*100}%"></i></div>${(c.cumpl*100).toFixed(0)}%</div></td>
+  <td class="r ${c.valorMora?"neg":"mut"}">${c.valorMora?cop(c.valorMora):"—"}</td><td>${chip(c.alerta)}</td></tr>`).join("")||`<tr><td colspan="10" class="mut" style="text-align:center;padding:30px">Sin resultados</td></tr>`}
+  </tbody></table></div>`;
+}
+V.clientes=()=>{
+  const l=filtrados();
+  return`<div class="hd"><div><h1>Clientes</h1><div class="sub">${l.length} de ${CL.length} clientes · clic en una fila para abrir la ficha</div></div>
+   <button class="btn" onclick="exportCSV()">⬇ Exportar CSV</button></div>
+  <div class="bar"><input id="fq" type="search" placeholder="Cédula o nombre…" value="${esc(fil.q)}">
+   <select id="fa"><option value="">Todos los asesores</option>${ASESORES.map(a=>`<option value="${a.id}" ${fil.asesor===a.id?"selected":""}>${a.nombre}</option>`).join("")}</select>
+   <select id="fe"><option value="">Todos los estados</option>${ESTADOS.map(e=>`<option ${fil.estado===e?"selected":""}>${e}</option>`).join("")}</select>
+   <select id="fl"><option value="">Todas las alertas</option>${[["ok","🟢 Al día"],["warn","🟡 En mora"],["bad","🔴 Grave / sin pago"],["info","Finalizados"]].map(([k,t])=>`<option value="${k}" ${fil.alerta===k?"selected":""}>${t}</option>`).join("")}</select></div>
+  <div id="tbl">${tabla(l)}</div>`;
+};
+V.clientesInit=()=>{
+  const up=()=>{fil={q:$("#fq").value,asesor:$("#fa").value,estado:$("#fe").value,alerta:$("#fl").value};$("#tbl").innerHTML=tabla(filtrados())};
+  ["#fq","#fa","#fe","#fl"].forEach(s=>$(s).addEventListener("input",up));
+};
+function sortBy(k){sortD=sortK===k?-sortD:1;sortK=k;$("#tbl").innerHTML=tabla(filtrados())}
+function exportCSV(){
+  const h=["N","Cedula","Cliente","Asesor","Estado","Contrato","Recibido","Saldo","Mora","Dias mora","Alerta"];
+  const rows=filtrados().map(c=>[c.n,c.cedula,c.nombre,ase(c.asesor).nombre,c.estado,c.contrato,c.recibido,c.saldo,c.valorMora,c.dias,c.alerta.t.replace(/[^\wÁ-ú ]/g,"").trim()]);
+  const csv=[h,...rows].map(r=>r.map(x=>`"${x}"`).join(",")).join("\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["﻿"+csv],{type:"text/csv"}));a.download="clientes.csv";a.click();
+}
+
+V.cliente=id=>{
+  const c=CL.find(x=>x.n===id);if(!c)return`<div class="card">Cliente no encontrado.</div>`;
+  const ini=pd(c.inicio);let nota="";try{nota=localStorage.getItem("mi_nota_"+c.n)||""}catch(e){}
+  const q=Array.from({length:c.cuotas},(_,k)=>{const d=addM(ini,k),paid=k<c.pagadas,late=!paid&&d<=HOY;
+    return`<div class="q ${paid?"paid":late?"late":""}" data-tip="Cuota ${k+1} · vence ${d.toLocaleDateString("es-CO")} · ${paid?"pagada":late?"EN MORA":"pendiente"}">${k+1}</div>`}).join("");
+  const mm=porMes([c]);const a=ase(c.asesor);
+  return`<div class="crumb"><a onclick="go('#/clientes')">Clientes</a> / ${esc(c.nombre)}</div>
+  <div class="hd"><div><h1>${esc(c.nombre)}</h1><div class="sub">CC ${c.cedula} · N° ${c.n} · Asesor: <a onclick="go('#/asesor/${a.id}')">${a.nombre}</a> · Tel. ${c.tel}</div></div>
+   <div style="display:flex;gap:8px;align-items:center"><span class="chip info">${c.estado}</span>${chip(c.alerta)}<button class="btn pri" onclick="go('#/pago/${c.n}')">+ Pago</button></div></div>
+  <div class="grid g-kpi">
+   ${KPI("Total contrato",cop(c.contrato),c.cuotas+" cuotas de "+cop(c.cuotaMes))}
+   ${KPI("Recibido",cop(c.recibido),(c.cumpl*100).toFixed(1)+"% cumplimiento","ok")}
+   ${KPI("Saldo por cobrar",cop(c.saldo),c.restantes+" cuotas restantes")}
+   ${KPI("Valor en mora",cop(c.valorMora),c.enMora?c.enMora+" cuota(s) · "+c.dias+" días":"Al día",c.valorMora?"bad":"")}
+  </div>
+  <div class="grid g-2" style="margin-top:12px">
+   <div class="card"><h2>Calendario de cuotas</h2><div class="legend"><span style="--c:var(--ok)">Pagada</span><span style="--c:var(--bad)">En mora</span><span style="--c:var(--line)">Pendiente</span></div><div class="cuotas">${q}</div>
+     <p class="sub" style="margin-top:12px">Inicio de pagos ${fdate(c.inicio)} · Finalización estimada ${fdate(c.fin)}</p></div>
+   <div class="card"><h2>Pagos 2026</h2><div class="legend"><span style="--c:var(--s1)">Recibido</span><span style="--c:var(--s2)">Esperado</span></div>${barChart(MES,mm.rec,mm.esp,170)}</div>
+   <div class="card"><h2>Historial de pagos</h2>${c.pagos.map(p=>`<div class="list-row"><span>${fdate(p.f)} <small class="mut">· ${esc(p.nota||"Pago")}</small></span><b>${cop(p.v)}</b></div>`).join("")||'<div class="mut">Aún sin pagos</div>'}</div>
+   <div class="card"><h2>Proceso y deuda</h2><div class="grid g-f">${F("Fecha ingreso",fdate(c.ingreso))}${F("Deuda declarada",cop(c.deuda))}${F("Deuda priorizada 30%",cop(c.priorizada))}${F("Centro conciliación",cop(c.centro))}${F("Sede",c.sede)}${F("Cuotas pagadas",c.pagadas+" / "+c.cuotas)}</div>
+     <h2 style="margin-top:16px">Costos y rentabilidad</h2><div class="grid g-f">${F("Honorarios abogado",cop(c.honorarios))}${F("Bonif. asesor",cop(c.bonif))}${F("Gastos admin",cop(c.gAdmin))}${F("Gastos adquisición",cop(c.gAdq))}${F("Costos totales",cop(c.costos))}${F("Resultado de caja",cop(c.neto),c.neto<0?"neg":"")}</div></div>
+  </div>
+  <div class="card" style="margin-top:12px"><h2>Notas del caso</h2><div class="form" style="max-width:none"><textarea id="nota" rows="3" placeholder="Acuerdos, llamadas, compromisos de pago…">${esc(nota)}</textarea><small class="mut">Se guarda automáticamente en este navegador.</small></div></div>`;
+};
+V.clienteInit=id=>{$("#nota").addEventListener("input",e=>{try{localStorage.setItem("mi_nota_"+id,e.target.value)}catch(x){}})};
+
+V.asesores=()=>`<div class="hd"><div><h1>Asesores</h1><div class="sub">Rendimiento comercial y de cobro por asesor</div></div></div>
+ <div class="grid g-2">${ASESORES.map(a=>{const l=CL.filter(c=>c.asesor===a.id),t=sum(l,"contrato"),r=sum(l,"recibido");
+  return`<div class="card" style="cursor:pointer;border-top:4px solid ${a.color}" onclick="go('#/asesor/${a.id}')"><h2>${a.nombre}</h2>
+   <div class="grid g-f">${F("Clientes",l.length)}${F("Recaudado",cop(r))}${F("Saldo",cop(t-r))}${F("En mora",cop(sum(l,"valorMora")),"neg")}${F("% recuperación",(t?r/t*100:0).toFixed(1)+"%")}${F("Bonificaciones",cop(l.length*300000))}</div></div>`}).join("")}</div>`;
+V.asesor=id=>{const a=ase(id);if(!a)return"";const l=CL.filter(c=>c.asesor===id),{rec,esp}=porMes(l),t=sum(l,"contrato"),r=sum(l,"recibido");
+  return`<div class="crumb"><a onclick="go('#/asesores')">Asesores</a> / ${a.nombre}</div><div class="hd"><div><h1>${a.nombre}</h1><div class="sub">${l.length} clientes asignados</div></div></div>
+  <div class="grid g-kpi">${KPI("Contratos",cop(t))}${KPI("Recaudado",cop(r),(t?r/t*100:0).toFixed(1)+"%","ok")}${KPI("Saldo",cop(t-r))}${KPI("Mora",cop(sum(l,"valorMora")),l.filter(c=>c.valorMora>0).length+" clientes","bad")}</div>
+  <div class="card" style="margin:12px 0"><h2>Recaudo mensual 2026</h2><div class="legend"><span style="--c:var(--s1)">Recibido</span><span style="--c:var(--s2)">Esperado</span></div>${barChart(MES,rec,esp)}</div>
+  ${tabla(l)}`;};
+
+V.cobranza=()=>{
+  const l=CL.filter(c=>c.valorMora>0).sort((a,b)=>b.dias-a.dias);
+  const bk=[["1–30 días",c=>c.dias<=30,"warn"],["31–60 días",c=>c.dias>30&&c.dias<=60,"warn"],["61–90 días",c=>c.dias>60&&c.dias<=90,"bad"],["+90 días",c=>c.dias>90,"bad"]];
+  return`<div class="hd"><div><h1>Cobranza</h1><div class="sub">Clientes en mora ordenados por antigüedad</div></div></div>
+  <div class="grid g-kpi">${bk.map(([t,f,k])=>{const x=l.filter(f);return KPI(t,cop(sum(x,"valorMora")),x.length+" clientes",k==="bad"?"bad":"")}).join("")}</div>
+  <div class="tw" style="margin-top:12px"><table><thead><tr><th>Cliente</th><th>Asesor</th><th class="r">Cuotas</th><th class="r">Mora</th><th class="r">Días</th><th>Contacto</th></tr></thead><tbody>
+  ${l.map(c=>`<tr><td><a onclick="go('#/cliente/${c.n}')"><b>${esc(c.nombre)}</b></a><br><small class="mut">CC ${c.cedula}</small></td><td>${ase(c.asesor).nombre}</td><td class="r">${c.enMora}</td><td class="r neg">${cop(c.valorMora)}</td><td class="r">${c.dias}</td>
+  <td><a class="btn" href="tel:${c.tel}">📞 ${c.tel}</a> <a class="btn" target="_blank" rel="noopener" href="https://wa.me/57${c.tel}?text=${encodeURIComponent("Hola "+c.nombre.split(" ")[0]+", le recordamos su cuota pendiente de "+cop(c.valorMora)+".")}">WhatsApp</a></td></tr>`).join("")||'<tr><td colspan="6" class="mut" style="text-align:center;padding:30px">Sin clientes en mora 🎉</td></tr>'}</tbody></table></div>`;
+};
+
+V.flujo=()=>{
+  const tot=Array(12).fill(0);
+  const rows=CL.map(c=>{const {rec}=porMes([c]);rec.forEach((v,i)=>tot[i]+=v);return{c,rec}});
+  const mx=Math.max(...rows.flatMap(r=>r.rec),1);
+  return`<div class="hd"><div><h1>Flujo anual 2026</h1><div class="sub">Pagos recibidos por cliente y mes · más oscuro = mayor valor</div></div></div>
+  <div class="tw"><table class="heat"><thead><tr><th>Cliente</th>${MES.map(m=>`<th style="text-align:center">${m}</th>`).join("")}<th class="r">Total</th></tr></thead><tbody>
+  ${rows.map(({c,rec})=>`<tr><td class="n"><a onclick="go('#/cliente/${c.n}')">${esc(c.nombre)}</a></td>${rec.map((v,i)=>`<td data-tip="${esc(c.nombre)} · ${MES[i]}: ${cop(v)}" style="${v?`background:color-mix(in srgb,var(--s1) ${15+v/mx*70}%,transparent)`:""}">${v?(v/1e6).toFixed(1):""}</td>`).join("")}<td class="r"><b>${M(rec.reduce((a,b)=>a+b,0))}</b></td></tr>`).join("")}
+  <tr><td class="n"><b>TOTAL</b></td>${tot.map(v=>`<td><b>${v?(v/1e6).toFixed(1):""}</b></td>`).join("")}<td class="r"><b>${M(tot.reduce((a,b)=>a+b,0))}</b></td></tr></tbody></table></div>
+  <p class="sub">Valores en millones de pesos.</p>`;
+};
+
+V.pago=pre=>`<div class="hd"><div><h1>Registrar pago</h1><div class="sub">Ingrese la cédula y el valor; mora, saldo y alertas se recalculan solos.</div></div></div>
+ <div class="card"><form class="form" id="pf">
+  <label>Cédula del cliente<input id="pc" list="dl" required inputmode="numeric" placeholder="Ej. ${CL[0].cedula}" value="${pre?CL.find(c=>c.n===pre)?.cedula||"":""}"></label>
+  <datalist id="dl">${CL.map(c=>`<option value="${c.cedula}">${esc(c.nombre)}</option>`).join("")}</datalist>
+  <div id="pinfo" class="f" style="display:none"></div>
+  <label>Fecha<input id="pfch" type="date" required value="${iso(HOY)}"></label>
+  <label>Valor (COP)<input id="pv" type="number" min="1000" step="1000" required placeholder="1000000"></label>
+  <label>Concepto<select id="pn"><option>Cuota</option><option>Anticipo</option><option>Honorarios</option></select></label>
+  <button class="btn pri" type="submit">Guardar pago</button></form></div>`;
+V.pagoInit=()=>{
+  const find=()=>CL.find(c=>c.cedula===$("#pc").value.replace(/\D/g,""));
+  const upd=()=>{const c=find(),b=$("#pinfo");if(!c){b.style.display="none";return}b.style.display="block";b.innerHTML=`<small>Cliente</small><b>${esc(c.nombre)}</b> · saldo ${cop(c.saldo)} · mora ${cop(c.valorMora)}`;if(!$("#pv").value)$("#pv").value=c.cuotaMes};
+  $("#pc").addEventListener("input",upd);upd();
+  $("#pf").addEventListener("submit",e=>{e.preventDefault();const c=find();if(!c){toast("No existe un cliente con esa cédula",1);return}
+    EXTRA.push({n:c.n,f:$("#pfch").value,v:Number($("#pv").value),nota:$("#pn").value});
+    try{localStorage.setItem("mi_pagos_v1",JSON.stringify(EXTRA))}catch(x){}
+    derive();toast("Pago registrado ✔");go("#/cliente/"+c.n)});
+};
+
+/* ================= ROUTER / UI ================= */
+const NAV=[["resumen","📊","Resumen"],["clientes","👥","Clientes"],["asesores","🧑‍💼","Asesores"],["cobranza","📞","Cobranza"],["flujo","📅","Flujo 2026"],["pago","💵","Registrar pago"]];
+function go(h){location.hash=h;if(location.hash===h)render()}
+function toast(t,bad){const e=$("#toast");e.textContent=t;e.style.background=bad?"var(--bad)":"var(--ok)";e.style.display="block";setTimeout(()=>e.style.display="none",2200)}
+function render(){
+  const [,sec="resumen",arg]=location.hash.split("/");
+  const key=sec in V?sec:"resumen";
+  $("#view").innerHTML=V[key](arg);
+  if(V[key+"Init"])V[key+"Init"](arg);
+  $("#nav").innerHTML=NAV.map(([k,i,t])=>`<a class="${k===key||(k==="clientes"&&key==="cliente")||(k==="asesores"&&key==="asesor")?"on":""}" onclick="go('#/${k}')">${i} ${t}</a>`).join("");
+  window.scrollTo(0,0);
+}
+window.addEventListener("hashchange",render);
+/* buscador global por cédula */
+$("#gs").addEventListener("input",e=>{
+  const q=e.target.value.trim().toLowerCase(),qd=q.replace(/\D/g,""),d=$("#drop");
+  if(!q){d.style.display="none";return}
+  const r=CL.filter(c=>c.nombre.toLowerCase().includes(q)||(qd&&c.cedula.includes(qd))).slice(0,6);
+  d.innerHTML=r.map(c=>`<a onclick="go('#/cliente/${c.n}');$('#gs').value='';$('#drop').style.display='none'"><b>${esc(c.nombre)}</b><br><small>CC ${c.cedula} · ${ase(c.asesor).nombre}</small></a>`).join("")||'<a><small>Sin resultados</small></a>';
+  d.style.display="block";
+});
+document.addEventListener("click",e=>{if(!e.target.closest(".search"))$("#drop").style.display="none"});
+/* tooltips */
+const tip=$("#tip");
+document.addEventListener("mouseover",e=>{const t=e.target.closest("[data-tip]");if(t){tip.textContent=t.dataset.tip;tip.style.display="block"}else tip.style.display="none"});
+document.addEventListener("mousemove",e=>{tip.style.left=Math.min(e.clientX+12,innerWidth-270)+"px";tip.style.top=(e.clientY+14)+"px"});
+derive();render();
+</script>
+</body>
+</html>
