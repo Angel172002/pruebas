@@ -21,6 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      - run: ./scripts/verificar-sin-datos-reales.sh
       - run: npm run check
       - run: npm test
       - run: npm audit --omit=dev --audit-level=high

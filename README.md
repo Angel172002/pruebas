@@ -34,6 +34,12 @@ Cada persona entra con **su propio correo y clave**. El administrador crea y ges
 - **Modo desarrollo abierto** (`DEV_OPEN=1`): solo fuera de producción y solo si se pide de forma explícita.
 - Límites: intentos por correo+IP (8), por correo (30) y por IP (40) cada 15 min, registrados **antes** de verificar la clave (una ráfaga paralela no los evade); el cambio de clave propio también tiene límite.
 
+## Cartera (matriz financiera de insolvencia)
+
+Módulo con clientes, pagos, mora, cobranza, flujo anual, asesores, migración desde la hoja y auditoría. Datos personales **cifrados** (AES-256-GCM), permisos **por asesor**, bitácora **encadenada**, libro de pagos **inmutable**, **verificación en dos pasos** (TOTP) y migración con **simulación**. Documentación completa, riesgos que quedan, hallazgos de la matriz actual, plan de migración y lista de salida a producción: **[docs/CARTERA.md](docs/CARTERA.md)**.
+
+En producción son obligatorias `DATA_KEY` (`openssl rand -hex 32`, guárdala en un gestor de secretos: sin ella los datos personales no se recuperan) y, por defecto, el 2FA de los administradores (`MFA_REQUIRED`). Nunca subas CSV/Excel de clientes al repositorio (el CI lo verifica).
+
 ## Reglas de negocio
 
 - Fechas de negocio = `YYYY-MM-DD` en zona `America/Bogota` (sin desfases por DST/zona del navegador).
@@ -69,6 +75,8 @@ Vercel es serverless (disco efímero), por eso en producción la base es **Neon*
    | `ADMIN_EMAIL` | correo del administrador |
    | `OWNER_TOKEN` | clave **inicial** del admin (≥ 12); se te pedirá cambiarla al entrar |
    | `SESSION_SECRET` | aleatorio (≥ 16): `openssl rand -hex 32` |
+   | `DATA_KEY` | clave de cifrado de la cartera (32 bytes): `openssl rand -hex 32`. **Haz copia en un gestor de secretos** |
+   | `MFA_REQUIRED` | `admin` (por defecto en producción), `all` u `off` |
    | `GITHUB_TOKEN`, `GITHUB_REPOS` | opcionales (ver GitHub) |
 4. Despliega. Comprueba `https://<tu-app>.vercel.app/readyz`. Las migraciones se aplican solas en el primer arranque.
 
@@ -99,5 +107,5 @@ test/        node:test (API, usuarios y aislamiento por dirección, recurrencia,
 
 ## Fuera de alcance por ahora
 
-Recordatorios por correo/push, edición masiva, SSO/MFA, autoservicio de "olvidé mi clave" por correo, entidad Reunión propia,
+Recordatorios por correo/push, edición masiva, SSO, autoservicio de "olvidé mi clave" por correo, entidad Reunión propia,
 adjuntos/comprobantes de pago.

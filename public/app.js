@@ -1,4 +1,5 @@
 import { api, ApiError } from './api.js';
+import { montarCartera } from './cartera.js';
 
 const CATS = {
   urgente:     { nombre: 'Urgente',     regla: 'Mismo día, máximo 2 días',              ayuda: 'Lo resuelves hoy o, a más tardar, en 2 días.' },
@@ -52,7 +53,7 @@ function toast(msg, deshacer) {
 }
 function fallo(e) {
   if (e instanceof ApiError && e.status === 401) return sinSesion();
-  if (e instanceof ApiError && e.code === 'must_change') return arrancar();
+  if (e instanceof ApiError && (e.code === 'must_change' || e.code === 'must_mfa')) return arrancar();
   toast(e.message || 'No se pudo completar la acción.');
 }
 
@@ -66,7 +67,7 @@ async function cargar() {
     S.error = ''; S.cargado = true;
   } catch (e) {
     if (e.status === 401) return sinSesion();
-    if (e.code === 'must_change') return arrancar();
+    if (e.code === 'must_change' || e.code === 'must_mfa') return arrancar();
     S.error = 'No se pudo actualizar desde el servidor. Mostrando los últimos datos.'; S.cargado = true;
   }
   render();
@@ -75,18 +76,21 @@ async function arrancar() {
   try {
     const r = await api.get('/session');
     S.cfg = r; S.user = r.user; S.rol = r.user?.rol || null;
-    if (S.user && !S.user.must_change) poblarSelects();
+    if (S.user && !S.user.must_change && !S.user.must_mfa) poblarSelects();
   } catch { S.error = 'No hay conexión con el servidor.'; }
   mostrar();
-  if (S.user && !S.user.must_change) { render(); await cargar(); }
+  if (S.user && !S.user.must_change && !S.user.must_mfa) { render(); await cargar(); }
 }
-function sinSesion() { S.user = null; S.rol = null; S.tasks = []; S.props = []; S.users = []; mostrar(); }
+function sinSesion() { S.cartera?.olvidar(); S.cartera = null; S.user = null; S.rol = null; S.tasks = []; S.props = []; S.users = []; mostrar(); }
 function mostrar() {
-  const u = S.user, forzar = Boolean(u?.must_change);
-  $('#login').hidden = Boolean(u); $('#forzar').hidden = !forzar; $('#app').hidden = !u || forzar;
-  $('#fab').hidden = !u || forzar || S.rol === 'lector';
-  if (!u) { $('#lErr').textContent = S.error && !S.cfg ? S.error : ''; $('#lCorreo').focus(); }
-  if (forzar) { $('#forzarCuerpo').replaceChildren(h('div', { class: 'auth-stripe', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')), h('h1', { text: 'Crea tu clave' }), h('p', { class: 'auth-sub', text: `Hola, ${u.nombre}. Por seguridad debes cambiar la clave temporal antes de entrar.` }), formClave({ forzado: true, alOk: arrancar })); }
+  const u = S.user, forzar = Boolean(u?.must_change), mfaForzada = Boolean(u?.must_mfa) && !forzar, bloqueo = forzar || mfaForzada;
+  $('#login').hidden = Boolean(u); $('#forzar').hidden = !bloqueo; $('#app').hidden = !u || bloqueo;
+  $('#fab').hidden = !u || bloqueo || S.rol === 'lector';
+  if (!u) { $('#loginForm').hidden = false; $('#mfaForm').hidden = true; $('#lErr').textContent = S.error && !S.cfg ? S.error : ''; $('#lCorreo').focus(); }
+  const marco = [h('div', { class: 'auth-stripe', 'aria-hidden': 'true' }, h('i'), h('i'), h('i'))];
+  if (forzar) { $('#forzarCuerpo').replaceChildren(...marco, h('h1', { text: 'Crea tu clave' }), h('p', { class: 'auth-sub', text: `Hola, ${u.nombre}. Por seguridad debes cambiar la clave temporal antes de entrar.` }), formClave({ forzado: true, alOk: arrancar })); }
+  else if (mfaForzada) { $('#forzarCuerpo').replaceChildren(...marco, h('h1', { text: 'Activa la verificación en dos pasos' }), h('p', { class: 'auth-sub', text: `Hola, ${u.nombre}. La política de seguridad exige un segundo factor para tu cuenta antes de ver datos.` }), formMfa({ alOk: arrancar }),
+    h('button', { class: 'btn quiet', type: 'button', text: 'Salir', onclick: () => $('#bSalir').click() })); }
 }
 
 /* ---------- filtros ---------- */
@@ -122,15 +126,18 @@ function render() {
   $('#toolbar').hidden = !['actividades', 'pagos'].includes(S.ui.tab);
   document.querySelectorAll('#fEstado button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === S.ui.estado)));
   for (const id of ['pagos', 'confirmar', 'usuarios', 'datos']) $('#tab-' + id).hidden = !owner;
-  if (!owner && S.ui.tab !== 'actividades') S.ui.tab = 'actividades';
+  const conCartera = Boolean(S.user.acceso_cartera) && S.user.acceso_cartera !== 'ninguno';
+  $('#tab-cartera').hidden = !conCartera;
+  if (!owner && S.ui.tab !== 'actividades' && !(S.ui.tab === 'cartera' && conCartera)) S.ui.tab = 'actividades';
   document.querySelectorAll('.tab').forEach(t => { const sel = t.dataset.tab === S.ui.tab; t.setAttribute('aria-selected', String(sel)); t.tabIndex = sel ? 0 : -1; });
-  for (const id of ['actividades', 'pagos', 'confirmar', 'usuarios', 'datos']) $('#pan-' + id).hidden = S.ui.tab !== id;
+  for (const id of ['actividades', 'cartera', 'pagos', 'confirmar', 'usuarios', 'datos']) $('#pan-' + id).hidden = S.ui.tab !== id;
   $('#nAct').textContent = S.tasks.filter(t => t.tipo === 'actividad' && t.estado === 'pendiente' && pasaDir(t)).length;
   $('#nPag').textContent = S.tasks.filter(t => t.tipo === 'pago' && t.estado === 'pendiente' && pasaDir(t)).length;
   const nc = S.props.filter(t => t.estado === 'propuesta').length;
   $('#nConf').textContent = nc; $('#nConf').classList.toggle('hay', nc > 0);
   document.querySelectorAll('[data-escribe]').forEach(b => { b.hidden = !esEscritor() || (b.dataset.tipo === 'pago' && !owner); });
   const av = $('#aviso'); av.hidden = !S.error; av.replaceChildren(h('span', { text: S.error }), h('button', { class: 'btn sm', type: 'button', text: 'Reintentar', onclick: cargar }));
+  if (S.ui.tab === 'cartera') return; // el módulo de cartera se pinta solo (irPestana)
   if (S.ui.tab === 'actividades') renderAct(); else if (S.ui.tab === 'pagos') renderPag(); else if (S.ui.tab === 'confirmar') renderConf(); else if (S.ui.tab === 'usuarios') renderUsuarios(); else renderDatos();
   if (foco) document.querySelector(`[data-id="${CSS.escape(foco.id)}"][data-act="${CSS.escape(foco.act)}"]`)?.focus();
 }
@@ -406,7 +413,10 @@ function poblarSelects() {
   $('#fDir').hidden = S.rol !== 'admin'; // cada miembro ya ve solo su dirección
   $('#fDir').value = S.ui.dir;
 }
-function irPestana(id) { S.ui.tab = id; render(); }
+function irPestana(id) {
+  S.ui.tab = id; render();
+  if (id === 'cartera') { S.cartera ??= montarCartera($('#cartera'), { user: S.user, cfg: S.cfg, toast, fallo }); S.cartera.abrir(); }
+}
 document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => irPestana(t.dataset.tab)));
 $('.tabs').addEventListener('keydown', e => {
   const vis = [...document.querySelectorAll('.tab')].filter(t => !t.hidden); let i = vis.findIndex(t => t.dataset.tab === S.ui.tab);
@@ -441,6 +451,7 @@ $('#bTema').addEventListener('click', () => {
 });
 $('#bSalir').addEventListener('click', async () => { try { await api.post('/logout'); } catch {} S.cfg = null; sinSesion(); });
 $('#bCuenta').addEventListener('click', () => abrirGen('Cambiar mi clave', formClave({ forzado: false, alOk: () => { gen.close(); toast('Clave actualizada.'); cargar(); } })));
+$('#bMfa').addEventListener('click', () => abrirGen('Verificación en dos pasos', S.user.mfa ? formMfaActiva() : formMfa({ alOk: async () => { gen.close(); await arrancar(); toast('Verificación en dos pasos activa.'); } })));
 $('#lVer').addEventListener('click', e => {
   const i = $('#lClave'), ver = i.type === 'password';
   i.type = ver ? 'text' : 'password'; e.currentTarget.textContent = ver ? 'Ocultar' : 'Ver';
@@ -449,9 +460,21 @@ $('#lVer').addEventListener('click', e => {
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault(); const btn = $('#lEntrar'); if (btn.disabled) return;
   $('#lErr').textContent = ''; btn.disabled = true; btn.textContent = 'Entrando…';
-  try { await api.post('/login', { email: $('#lCorreo').value, password: $('#lClave').value }); $('#lClave').value = ''; S.error = ''; await arrancar(); }
+  try {
+    const r = await api.post('/login', { email: $('#lCorreo').value, password: $('#lClave').value }); $('#lClave').value = '';
+    if (r.mfa) { S.reto = r.reto; $('#loginForm').hidden = true; $('#mfaForm').hidden = false; $('#mErr').textContent = ''; $('#mCodigo').value = ''; $('#mCodigo').focus(); return; }
+    S.error = ''; await arrancar();
+  }
   catch (err) { $('#lErr').textContent = err.message; $('#lClave').select(); }
   finally { btn.disabled = false; btn.textContent = 'Entrar'; }
+});
+$('#mVolver').addEventListener('click', () => { S.reto = null; $('#mfaForm').hidden = true; $('#loginForm').hidden = false; $('#lCorreo').focus(); });
+$('#mfaForm').addEventListener('submit', async e => {
+  e.preventDefault(); const btn = $('#mEntrar'); if (btn.disabled) return;
+  $('#mErr').textContent = ''; btn.disabled = true;
+  try { await api.post('/login/mfa', { reto: S.reto, codigo: $('#mCodigo').value }); S.reto = null; $('#mCodigo').value = ''; S.error = ''; await arrancar(); }
+  catch (err) { $('#mErr').textContent = err.message; if (err.status === 401 && /expir/i.test(err.message)) $('#mVolver').click(); else $('#mCodigo').select(); }
+  finally { btn.disabled = false; }
 });
 $('#bResumen').addEventListener('click', async () => {
   const a = S.tasks.filter(t => t.tipo === 'actividad' && t.estado === 'pendiente' && pasaDir(t));
@@ -493,17 +516,46 @@ function formClave({ forzado, alOk }) {
   forzado ? h('button', { class: 'btn quiet', type: 'button', text: 'Salir', onclick: () => $('#bSalir').click() }) : h('button', { class: 'btn quiet', type: 'button', text: 'Cancelar', onclick: () => gen.close() }));
 }
 
+function formMfa({ alOk }) {
+  const cont = h('div', {}), err = h('p', { class: 'err', role: 'alert' });
+  const paso1 = () => cont.replaceChildren(h('p', { text: 'Necesitas una aplicación de autenticación (Google Authenticator, Microsoft Authenticator, Authy, 1Password…). Cada vez que inicies sesión te pedirá un código de 6 dígitos.' }), err,
+    h('button', { class: 'btn primary big', type: 'button', text: 'Comenzar', onclick: async () => { try { paso2(await api.post('/me/mfa/setup')); } catch (e) { err.textContent = e.message; } } }));
+  const paso2 = r => {
+    const cod = h('input', { id: 'mfCod', inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: '7' });
+    cont.replaceChildren(h('p', { text: '1. En la aplicación elige «Agregar cuenta» → «Ingresar clave de configuración» y escribe esta clave (tipo: basada en tiempo):' }),
+      h('div', { class: 'mfa-secreto', text: r.secreto.match(/.{1,4}/g).join(' ') }), h('p', { class: 'hint', text: `Cuenta: ${S.user.email}` }),
+      h('p', { text: '2. Escribe el código de 6 dígitos que muestra la aplicación:' }), h('div', { class: 'field' }, h('label', { for: 'mfCod', text: 'Código' }), cod), err,
+      h('button', { class: 'btn primary big', type: 'button', text: 'Activar', onclick: async () => { err.textContent = ''; try { paso3((await api.post('/me/mfa/enable', { codigo: cod.value })).recuperacion); } catch (e) { err.textContent = e.message; } } }));
+    cod.focus();
+  };
+  const paso3 = codigos => cont.replaceChildren(h('p', { text: 'Verificación activada. Guarda estos códigos de recuperación en un lugar seguro: cada uno sirve una sola vez si pierdes el teléfono. No se volverán a mostrar.' }),
+    h('div', { class: 'mfa-codigos' }, codigos.map(c => h('span', { text: c }))),
+    h('div', { class: 'row-btns' }, h('button', { class: 'btn', type: 'button', text: 'Copiar códigos', onclick: async () => { try { await navigator.clipboard.writeText(codigos.join('\n')); toast('Códigos copiados.'); } catch { toast('Selecciónalos y cópialos manualmente.'); } } }),
+      h('button', { class: 'btn primary', type: 'button', text: 'Ya los guardé', onclick: alOk })));
+  paso1(); return cont;
+}
+function formMfaActiva() {
+  const clave = h('input', { id: 'mdClave', type: 'password', autocomplete: 'current-password' }), cod = h('input', { id: 'mdCod', inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: '7' }), err = h('p', { class: 'err', role: 'alert' });
+  return h('form', { novalidate: true, onsubmit: async ev => {
+    ev.preventDefault(); err.textContent = '';
+    try { await api.post('/me/mfa/disable', { clave: clave.value, codigo: cod.value }); gen.close(); await arrancar(); toast('Verificación en dos pasos desactivada.'); } catch (e) { err.textContent = e.message; }
+  } }, h('p', { text: 'La verificación en dos pasos está activa en tu cuenta. Para desactivarla confirma tu clave y un código.' }),
+  h('div', { class: 'field' }, h('label', { for: 'mdClave', text: 'Tu clave' }), clave), h('div', { class: 'field' }, h('label', { for: 'mdCod', text: 'Código de la aplicación' }), cod), err,
+  h('div', { class: 'dlg-f' }, h('div'), h('div', {}, h('button', { class: 'btn', type: 'button', text: 'Cerrar', onclick: () => gen.close() }), h('button', { class: 'btn danger', type: 'submit', text: 'Desactivar' }))));
+}
+
 function renderUsuarios() {
   const cont = $('#usuarios');
   if (!S.users.length) { cont.replaceChildren(h('div', { class: 'vacio', text: 'Aún no hay usuarios.' })); return; }
   cont.replaceChildren(h('div', { class: 'lista-usuarios' }, S.users.map(u => h('div', { class: `user-row ${u.activo ? '' : 'inactivo'}` },
     h('div', {}, h('strong', { text: u.nombre }), h('span', { class: 'meta', text: u.email + (u.activo ? '' : ' · desactivado') })),
     h('span', { class: `chip-rol ${u.rol}`, text: ROLES[u.rol] }),
-    h('span', { text: u.area || 'Todas las direcciones' }),
+    h('span', {}, u.area || 'Todas las direcciones', h('small', { class: 'acceso block', text: `Cartera: ${{ ninguno: 'sin acceso', propia: 'solo sus clientes', total: 'todos' }[u.acceso_cartera]} · ${u.mfa_enabled ? '2FA activa' : 'sin 2FA'}` })),
     h('span', { class: 'meta', text: u.must_change ? 'Pendiente de primer ingreso' : u.last_login ? 'Último ingreso ' + new Date(u.last_login).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }) : 'Nunca ingresó' }),
     h('div', { class: 'pr-acts' },
       h('button', { class: 'btn sm', type: 'button', text: 'Editar', onclick: () => formUsuario(u) }),
       h('button', { class: 'btn sm', type: 'button', text: 'Restablecer clave', onclick: () => restablecer(u) }),
+      u.mfa_enabled ? h('button', { class: 'btn sm', type: 'button', text: 'Quitar 2FA', onclick: async () => { if (!confirm(`¿Quitar la verificación en dos pasos de ${u.nombre}? Podrá activarla de nuevo.`)) return; try { await api.post(`/users/${u.id}/mfa/reset`); await cargar(); toast('2FA restablecida.'); } catch (e) { fallo(e); } } }) : null,
       h('button', { class: 'btn sm quiet', type: 'button', text: u.activo ? 'Desactivar' : 'Activar', disabled: u.id === S.user.id,
         onclick: async () => { if (u.activo && !confirm(`¿Desactivar a ${u.nombre}? Su sesión se cerrará de inmediato.`)) return;
           try { await api.patch(`/users/${u.id}`, { activo: !u.activo }); await cargar(); toast(u.activo ? 'Usuario desactivado.' : 'Usuario activado.'); } catch (e) { fallo(e); } } }))))));
@@ -530,20 +582,23 @@ function formUsuario(u) {
   const area = h('select', { id: 'uArea' }, S.cfg.areas.filter(a => a !== TODOS).map(a => h('option', { value: a, text: a })));
   if (u?.area) area.value = u.area;
   const campoArea = h('div', { class: 'field' }, h('label', { for: 'uArea', text: 'Dirección' }), area);
-  const sync = () => { campoArea.hidden = rol.value === 'admin'; }; rol.addEventListener('change', sync); sync();
+  const acceso = h('select', { id: 'uCart' }, [['ninguno', 'Sin acceso a cartera'], ['propia', 'Solo sus propios clientes (asesor)'], ['total', 'Todos los clientes (coordinación)']].map(([v, t]) => h('option', { value: v, text: t })));
+  acceso.value = u?.acceso_cartera || 'ninguno';
+  const campoAcceso = h('div', { class: 'field' }, h('label', { for: 'uCart', text: 'Acceso a la cartera financiera' }), acceso, h('p', { class: 'hint', text: 'Los datos de clientes son sensibles: da el mínimo necesario. Los administradores ven todo.' }));
+  const sync = () => { campoArea.hidden = rol.value === 'admin'; campoAcceso.hidden = rol.value === 'admin'; }; rol.addEventListener('change', sync); sync();
   const err = h('p', { class: 'err', role: 'alert' });
   const enviar = h('button', { class: 'btn primary', type: 'submit', text: nuevo ? 'Crear usuario' : 'Guardar' });
   abrirGen(nuevo ? 'Nuevo usuario' : 'Editar usuario', h('form', { novalidate: true, onsubmit: async ev => {
     ev.preventDefault(); if (enviar.disabled) return; err.textContent = ''; enviar.disabled = true;
     try {
-      const datos = { nombre: nombre.value, rol: rol.value, area: rol.value === 'admin' ? null : area.value };
+      const datos = { nombre: nombre.value, rol: rol.value, area: rol.value === 'admin' ? null : area.value, acceso_cartera: rol.value === 'admin' ? 'total' : acceso.value };
       if (nuevo) { const r = await api.post('/users', { ...datos, email: correo.value }); gen.close(); await cargar(); mostrarTemporal(r.usuario.nombre, r.usuario.email, r.temporal); }
       else { await api.patch(`/users/${u.id}`, datos); gen.close(); await cargar(); toast('Usuario actualizado.'); }
     } catch (e) { err.textContent = e.message; } finally { enviar.disabled = false; }
   } },
   h('div', { class: 'field' }, h('label', { for: 'uNombre', text: 'Nombre' }), nombre),
   h('div', { class: 'field' }, h('label', { for: 'uCorreo', text: 'Correo' }), correo),
-  h('div', { class: 'field' }, h('label', { for: 'uRol', text: 'Rol' }), rol), campoArea, err,
+  h('div', { class: 'field' }, h('label', { for: 'uRol', text: 'Rol' }), rol), campoArea, campoAcceso, err,
   h('div', { class: 'dlg-f' }, h('div', {}), h('div', {}, h('button', { class: 'btn', type: 'button', text: 'Cancelar', onclick: () => gen.close() }), enviar))));
 }
 $('#bNuevoUsuario').addEventListener('click', () => formUsuario(null));

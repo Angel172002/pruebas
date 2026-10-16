@@ -7,6 +7,7 @@
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141A21'/%3E%3Cpath d='M9 17l5 5 9-11' stroke='%23fff' stroke-width='3' fill='none'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="cartera.css">
 <script src="theme.js"></script>
 </head>
 <body>
@@ -37,6 +38,15 @@
       <p class="err" id="lErr" role="alert"></p>
       <button class="btn primary big" id="lEntrar" type="submit">Entrar</button>
       <p class="auth-foot">¿Olvidaste tu clave? Pídele al administrador que la restablezca.</p>
+    </form>
+    <form id="mfaForm" class="auth-card" novalidate hidden>
+      <div class="auth-stripe" aria-hidden="true"><i></i><i></i><i></i></div>
+      <h1>Verificación en dos pasos</h1>
+      <p class="auth-sub">Escribe el código de 6 dígitos de tu aplicación de autenticación o uno de tus códigos de recuperación.</p>
+      <div class="field"><label for="mCodigo">Código</label><input id="mCodigo" autocomplete="one-time-code" inputmode="text" maxlength="14" required></div>
+      <p class="err" id="mErr" role="alert"></p>
+      <button class="btn primary big" id="mEntrar" type="submit">Verificar</button>
+      <button class="btn quiet" id="mVolver" type="button">Volver</button>
     </form>
     <p class="auth-legal">Acceso restringido al equipo directivo</p>
   </div>
@@ -69,6 +79,7 @@
           <div class="menu" id="menuUsuario" role="menu" aria-label="Cuenta" hidden>
             <div class="menu-h"><b id="mNombre"></b><small id="mCorreo"></small></div>
             <button type="button" role="menuitem" id="bCuenta">Cambiar mi clave</button>
+            <button type="button" role="menuitem" id="bMfa">Verificación en dos pasos</button>
             <button type="button" role="menuitem" id="bSalir">Cerrar sesión</button>
           </div>
         </div>
@@ -77,6 +88,7 @@
     <div class="appbar-tabs">
       <nav class="tabs" role="tablist" aria-label="Secciones">
         <button class="tab" role="tab" id="tab-actividades" aria-controls="pan-actividades" data-tab="actividades">Actividades <span class="n" id="nAct">0</span></button>
+        <button class="tab" role="tab" id="tab-cartera" aria-controls="pan-cartera" data-tab="cartera" hidden>Cartera</button>
         <button class="tab" role="tab" id="tab-pagos" aria-controls="pan-pagos" data-tab="pagos" hidden>Pagos <span class="n" id="nPag">0</span></button>
         <button class="tab" role="tab" id="tab-confirmar" aria-controls="pan-confirmar" data-tab="confirmar" hidden>Por confirmar <span class="n alerta" id="nConf">0</span></button>
         <button class="tab" role="tab" id="tab-usuarios" aria-controls="pan-usuarios" data-tab="usuarios" hidden>Usuarios</button>
@@ -109,6 +121,7 @@
           <button class="btn primary" data-act="new" data-tipo="actividad" data-escribe type="button">Nueva actividad</button></div></div>
         <div class="board" id="board"></div>
       </section>
+      <section id="pan-cartera" role="tabpanel" aria-labelledby="tab-cartera" tabindex="0" hidden><div id="cartera"></div></section>
       <section id="pan-pagos" role="tabpanel" aria-labelledby="tab-pagos" tabindex="0" hidden>
         <div class="bar"><ul class="resumen" id="resPag"></ul>
           <div class="bar-btns"><a class="btn" href="/api/export.csv?tipo=pago" download>Exportar CSV</a>

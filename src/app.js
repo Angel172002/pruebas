@@ -3,7 +3,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { AREAS, CATEGORIAS } from './config.js';
-import { anticsrf, authMiddleware, cookieOpts, crearSesion, hashFalso, requiere, validarClaveNueva, verificarClave } from './auth.js';
+import { anticsrf, authMiddleware, cookieOpts, crearReto, crearSesion, exigeMfa, hashFalso, leerReto, publico, requiere, validarClaveNueva, verificarClave } from './auth.js';
+import { crearCifrador } from './crypto.js';
+import { crearAuditoria } from './audit.js';
+import { crearCartera } from './cartera.js';
+import { crearImportador } from './cartera-import.js';
+import { CONCEPTOS, ESTADOS_PROCESO } from './cartera-domain.js';
+import * as totp from './totp.js';
 import { validarTarea } from './domain.js';
 import { crearStore } from './store.js';
 import { crearUsuarios, esCorreo } from './users.js';
@@ -18,6 +24,11 @@ export function crearApp({ cfg, db, fetchImpl }) {
   const app = express();
   const store = crearStore(db);
   const usuarios = crearUsuarios(db);
+  const cifrador = crearCifrador({ dataKey: cfg.dataKey, dataKeyPrev: cfg.dataKeyPrev });
+  const auditoria = crearAuditoria(db);
+  const cartera = crearCartera({ db, cifrador, auditoria });
+  const importador = crearImportador({ db, cifrador, auditoria, cartera });
+  const audit = (req, accion, extra = {}) => auditoria.registrar({ actor_id: req.user?.id, actor: req.user?.email || extra.actor || 'anon', accion, ip: req.ip, ...extra });
   const gh = crearGitHub({ token: cfg.githubToken, repos: cfg.githubRepos, fetchImpl });
   app.disable('x-powered-by');
   if (cfg.prod) app.set('trust proxy', 1);
@@ -26,7 +37,9 @@ export function crearApp({ cfg, db, fetchImpl }) {
     res.set({
       'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
       'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
-      ...(cfg.prod ? { 'Strict-Transport-Security': 'max-age=15552000' } : {})
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+      'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Resource-Policy': 'same-origin',
+      ...(cfg.prod ? { 'Strict-Transport-Security': 'max-age=63072000; includeSubDomains' } : {})
     });
     if (req.path.startsWith('/api')) res.set('Cache-Control', 'no-store');
     next();
@@ -40,7 +53,7 @@ export function crearApp({ cfg, db, fetchImpl }) {
   // ---- Sesión y cuenta propia
   const areasDe = u => (u.rol === 'admin' ? AREAS : [u.area]);
   app.get('/api/session', (req, res) => res.json({
-    user: req.user, areas: req.user ? areasDe(req.user) : [], categorias: CATEGORIAS,
+    user: req.user, areas: req.user ? areasDe(req.user) : [], categorias: CATEGORIAS, cartera: { estados: ESTADOS_PROCESO, conceptos: CONCEPTOS },
     github: { configurado: gh.configurado(), repos: req.user?.rol === 'admin' || req.user?.rol === 'miembro' ? gh.repos() : [] }
   }));
 
@@ -59,19 +72,43 @@ export function crearApp({ cfg, db, fetchImpl }) {
     return { bloqueado: false, ids };
   }
   const olvidar = ids => ids.length ? db.run(`DELETE FROM login_attempts WHERE id IN (${ids.map(() => '?').join(',')})`, ids) : null;
+  const emitir = (res, u) => res.set('Set-Cookie', `sid=${crearSesion(u, cfg.sessionSecret)}; ${cookieOpts(cfg)}`);
   app.post('/api/login', async (req, res) => {
     const correo = String(req.body?.email ?? '').trim().toLowerCase().slice(0, 120), clave = String(req.body?.password ?? '');
     const intento = await registrarIntento([[`p:${correo}|${req.ip}`, MAX_POR_PAR], [`c:${correo}`, MAX_POR_CORREO], [`i:${req.ip}`, MAX_POR_IP]]);
-    if (intento.bloqueado) return res.status(429).json({ error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' });
+    if (intento.bloqueado) { await audit(req, 'login_bloqueado', { actor: correo }); return res.status(429).json({ error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' }); }
     const u = esCorreo(correo) && clave.length <= 128 ? await db.get('SELECT * FROM users WHERE email = ?', [correo]) : undefined;
     const ok = await verificarClave(clave, u ? u.pass_hash : await hashFalso()) && u && u.activo;
-    if (!ok) return res.status(401).json({ error: 'Correo o clave incorrectos.' });
+    if (!ok) { await audit(req, 'login_fallido', { actor: correo }); return res.status(401).json({ error: 'Correo o clave incorrectos.' }); }
+    if (u.mfa_enabled) return res.json({ mfa: true, reto: crearReto(u, cfg.sessionSecret) }); // la sesión se emite tras el segundo factor
     await olvidar(intento.ids); // un ingreso correcto no cuenta contra el límite
     await db.run('UPDATE users SET last_login = ? WHERE id = ?', [new Date().toISOString(), u.id]);
-    res.set('Set-Cookie', `sid=${crearSesion(u, cfg.sessionSecret)}; ${cookieOpts(cfg)}`)
-      .json({ user: { id: u.id, email: u.email, nombre: u.nombre, rol: u.rol, area: u.area, must_change: Boolean(u.must_change) } });
+    await audit(req, 'login', { actor_id: u.id, actor: u.email });
+    emitir(res, u).json({ user: publico({ ...u, must_mfa: exigeMfa(cfg, u) }) });
   });
-  app.post('/api/logout', (_req, res) => res.set('Set-Cookie', SIN_SESION).json({ ok: true }));
+  app.post('/api/login/mfa', async (req, res) => {
+    const id = leerReto(req.body?.reto, cfg.sessionSecret);
+    const u = id && await db.get('SELECT * FROM users WHERE id = ?', [id]);
+    if (!u || !u.activo || !u.mfa_enabled) return res.status(401).json({ error: 'La verificación expiró. Inicia sesión de nuevo.' });
+    const intento = await registrarIntento([[`m:${u.id}`, MAX_POR_PAR], [`i:${req.ip}`, MAX_POR_IP]]);
+    if (intento.bloqueado) { await audit(req, 'mfa_bloqueado', { actor_id: u.id, actor: u.email }); return res.status(429).json({ error: 'Demasiados intentos. Espera unos minutos.' }); }
+    const cod = String(req.body?.codigo ?? '');
+    let valido = false;
+    // Se "consume" el contador con UPDATE condicional: dos envíos paralelos del mismo código no pasan ambos.
+    const c = totp.verificar(cifrador.descifrar(u.mfa_secret, `mfa:${u.id}`), cod, Number(u.mfa_ultimo));
+    if (c !== null) valido = (await db.run('UPDATE users SET mfa_ultimo = ? WHERE id = ? AND mfa_ultimo < ?', [c, u.id, c])).changes === 1;
+    else {
+      const h = totp.hashRecuperacion(cod), lista = JSON.parse(u.mfa_recuperacion || '[]');
+      if (lista.includes(h)) valido = (await db.run('UPDATE users SET mfa_recuperacion = ? WHERE id = ? AND mfa_recuperacion = ?', [JSON.stringify(lista.filter(x => x !== h)), u.id, u.mfa_recuperacion])).changes === 1;
+      if (valido) await audit(req, 'mfa_recuperacion_usada', { actor_id: u.id, actor: u.email, detalle: `quedan ${lista.length - 1}` });
+    }
+    if (!valido) { await audit(req, 'mfa_fallido', { actor_id: u.id, actor: u.email }); return res.status(401).json({ error: 'Código incorrecto.' }); }
+    await olvidar(intento.ids);
+    await db.run('UPDATE users SET last_login = ? WHERE id = ?', [new Date().toISOString(), u.id]);
+    await audit(req, 'login', { actor_id: u.id, actor: u.email, detalle: 'con segundo factor' });
+    emitir(res, u).json({ user: publico({ ...u, must_mfa: false }) });
+  });
+  app.post('/api/logout', async (req, res) => { if (req.user && req.user.id !== 'dev') await audit(req, 'logout'); res.set('Set-Cookie', SIN_SESION).json({ ok: true }); });
   app.post('/api/me/password', async (req, res) => {
     if (!req.user || req.user.id === 'dev') return res.status(401).json({ error: 'Inicia sesión.' });
     const { actual, nueva } = req.body || {};
@@ -80,11 +117,50 @@ export function crearApp({ cfg, db, fetchImpl }) {
     const fila = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
     if (!(await verificarClave(String(actual ?? ''), fila.pass_hash))) return res.status(401).json({ error: 'La clave actual no es correcta.' });
     await olvidar(intento.ids);
-    const err = validarClaveNueva(nueva, actual);
+    const err = validarClaveNueva(nueva, actual, req.user.email);
     if (err) return res.status(422).json({ error: err });
-    const u = await usuarios.cambiarClave(req.user.id, nueva);
+    await usuarios.cambiarClave(req.user.id, nueva);
     const fresca = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
-    res.set('Set-Cookie', `sid=${crearSesion(fresca, cfg.sessionSecret)}; ${cookieOpts(cfg)}`).json({ user: u });
+    await audit(req, 'cambiar_clave');
+    emitir(res, fresca).json({ user: publico({ ...fresca, must_mfa: exigeMfa(cfg, fresca) }) });
+  });
+
+  // ---- Verificación en dos pasos (TOTP). Estas rutas sirven también cuando MFA es obligatoria y aún no está activa.
+  const sesionReal = (req, res) => { if (!req.user || req.user.id === 'dev') { res.status(401).json({ error: 'Inicia sesión.' }); return false; } if (req.user.must_change) { res.status(403).json({ error: 'Debes cambiar tu clave antes de continuar.', code: 'must_change' }); return false; } return true; };
+  app.post('/api/me/mfa/setup', async (req, res) => {
+    if (!sesionReal(req, res)) return;
+    if (req.user.mfa) return res.status(409).json({ error: 'La verificación en dos pasos ya está activa.' });
+    const secreto = totp.nuevoSecreto();
+    await db.run('UPDATE users SET mfa_secret = ?, mfa_ultimo = 0 WHERE id = ?', [cifrador.cifrar(secreto, `mfa:${req.user.id}`), req.user.id]);
+    res.json({ secreto, uri: totp.uri(secreto, req.user.email) });
+  });
+  app.post('/api/me/mfa/enable', async (req, res) => {
+    if (!sesionReal(req, res)) return;
+    const u = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    if (u.mfa_enabled || !u.mfa_secret) return res.status(409).json({ error: 'Inicia la configuración de nuevo.' });
+    const intento = await registrarIntento([[`m:${u.id}`, MAX_POR_PAR]]);
+    if (intento.bloqueado) return res.status(429).json({ error: 'Demasiados intentos. Espera unos minutos.' });
+    const c = totp.verificar(cifrador.descifrar(u.mfa_secret, `mfa:${u.id}`), req.body?.codigo, 0);
+    if (c === null) return res.status(401).json({ error: 'Código incorrecto. Revisa la hora del teléfono e inténtalo de nuevo.' });
+    await olvidar(intento.ids);
+    const codigos = totp.generarRecuperacion();
+    await db.run('UPDATE users SET mfa_enabled = TRUE, mfa_ultimo = ?, mfa_recuperacion = ?, session_version = session_version + 1 WHERE id = ?', [c, JSON.stringify(codigos.map(totp.hashRecuperacion)), u.id]);
+    await audit(req, 'mfa_activar');
+    emitir(res, await db.get('SELECT * FROM users WHERE id = ?', [u.id])).json({ ok: true, recuperacion: codigos }); // se muestran una sola vez
+  });
+  app.post('/api/me/mfa/disable', async (req, res) => {
+    if (!sesionReal(req, res)) return;
+    const u = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    if (exigeMfa(cfg, { ...u, mfa_enabled: false })) return res.status(403).json({ error: 'La política de seguridad exige la verificación en dos pasos para tu cuenta.' });
+    const intento = await registrarIntento([[`m:${u.id}`, MAX_POR_PAR]]);
+    if (intento.bloqueado) return res.status(429).json({ error: 'Demasiados intentos. Espera unos minutos.' });
+    const okClave = await verificarClave(String(req.body?.clave ?? ''), u.pass_hash);
+    const c = u.mfa_enabled && totp.verificar(cifrador.descifrar(u.mfa_secret, `mfa:${u.id}`), req.body?.codigo, Number(u.mfa_ultimo));
+    if (!okClave || c === null || c === false) return res.status(401).json({ error: 'Clave o código incorrectos.' });
+    await olvidar(intento.ids);
+    await db.run("UPDATE users SET mfa_enabled = FALSE, mfa_secret = NULL, mfa_recuperacion = '[]', session_version = session_version + 1 WHERE id = ?", [u.id]);
+    await audit(req, 'mfa_desactivar');
+    emitir(res, await db.get('SELECT * FROM users WHERE id = ?', [u.id])).json({ ok: true });
   });
 
   const api = express.Router();
@@ -135,9 +211,14 @@ export function crearApp({ cfg, db, fetchImpl }) {
 
   // ---- Usuarios (solo administrador)
   api.get('/users', requiere('admin'), async (_req, res) => res.json({ users: await usuarios.listar() }));
-  api.post('/users', requiere('admin'), async (req, res) => res.status(201).json(await usuarios.crear(req.user, req.body || {})));
-  api.patch('/users/:id', requiere('admin'), async (req, res) => res.json({ user: await usuarios.actualizar(req.user, req.params.id, req.body || {}) }));
-  api.post('/users/:id/reset', requiere('admin'), async (req, res) => res.json(await usuarios.restablecer(req.user, req.params.id)));
+  api.post('/users', requiere('admin'), async (req, res) => { const r = await usuarios.crear(req.user, req.body || {}); await audit(req, 'usuario_crear', { entidad: 'usuario', entidad_id: r.usuario.id, detalle: `${r.usuario.rol} · cartera ${r.usuario.acceso_cartera}` }); res.status(201).json(r); });
+  api.patch('/users/:id', requiere('admin'), async (req, res) => { const u = await usuarios.actualizar(req.user, req.params.id, req.body || {}); await audit(req, 'usuario_editar', { entidad: 'usuario', entidad_id: u.id, detalle: `campos: ${Object.keys(req.body || {}).filter(k => k !== 'version').join(', ')}` }); res.json({ user: u }); });
+  api.post('/users/:id/reset', requiere('admin'), async (req, res) => { const r = await usuarios.restablecer(req.user, req.params.id); await audit(req, 'usuario_reset_clave', { entidad: 'usuario', entidad_id: req.params.id }); res.json(r); });
+  api.post('/users/:id/mfa/reset', requiere('admin'), async (req, res) => {
+    const r = await db.run("UPDATE users SET mfa_enabled = FALSE, mfa_secret = NULL, mfa_recuperacion = '[]', session_version = session_version + 1 WHERE id = ?", [req.params.id]);
+    if (!r.changes) return res.status(404).json({ error: 'No existe.' });
+    await audit(req, 'usuario_reset_mfa', { entidad: 'usuario', entidad_id: req.params.id }); res.json({ ok: true });
+  });
 
   // ---- Bandeja: propuestas (solo admin) y su alta manual
   api.get('/proposals', requiere('admin'), async (_req, res) => res.json({ tasks: (await store.listar({ incluirPagos: true })).filter(t => t.estado === 'propuesta' || t.estado === 'descartada') }));
@@ -215,6 +296,26 @@ export function crearApp({ cfg, db, fetchImpl }) {
     }
     res.json({ creadas });
   });
+
+  // ---- Cartera (matriz financiera). El alcance por usuario se aplica en src/cartera.js; aquí solo se enruta.
+  const ctx = req => ({ ip: req.ip });
+  api.get('/cartera/resumen', async (req, res) => res.json(await cartera.resumen(req.user)));
+  api.get('/cartera/clientes', async (req, res) => res.json({ clientes: await cartera.listar(req.user, { q: String(req.query.q ?? '').slice(0, 80) }, ctx(req)) }));
+  api.get('/cartera/clientes/:id', async (req, res) => { const c = await cartera.obtener(req.user, req.params.id, ctx(req)); if (!c) return res.status(404).json({ error: 'No existe.' }); res.json({ cliente: c }); });
+  api.post('/cartera/clientes', async (req, res) => res.status(201).json({ cliente: await cartera.crear(req.user, req.body, ctx(req)) }));
+  api.patch('/cartera/clientes/:id', async (req, res) => res.json({ cliente: await cartera.actualizar(req.user, req.params.id, req.body, ctx(req)) }));
+  api.post('/cartera/clientes/:id/pagos', async (req, res) => { const r = await cartera.registrarPago(req.user, req.params.id, req.body, ctx(req)); res.status(r.repetido ? 200 : 201).json(r); });
+  api.post('/cartera/pagos/:id/anular', async (req, res) => { await cartera.anularPago(req.user, req.params.id, req.body?.motivo, ctx(req)); res.json({ ok: true }); });
+  api.post('/cartera/clientes/:id/anonimizar', async (req, res) => { await cartera.anonimizar(req.user, req.params.id, ctx(req)); res.json({ ok: true }); });
+  api.get('/cartera/flujo', async (req, res) => res.json({ filas: await cartera.flujo(req.user) }));
+  api.get('/cartera/export.csv', async (req, res) => res.type('text/csv; charset=utf-8').set('Content-Disposition', 'attachment; filename="cartera.csv"').send(await cartera.exportarCsv(req.user, ctx(req))));
+  api.get('/cartera/asesores', requiere('admin'), async (_req, res) => res.json({ asesores: (await db.all('SELECT id, nombre, email FROM users WHERE activo = TRUE ORDER BY nombre')) }));
+  api.post('/cartera/import', requiere('admin'), async (req, res) => {
+    const csv = String(req.body?.csv ?? '');
+    res.json(req.query.dry === '1' ? await importador.simular(req.user, csv, ctx(req)) : await importador.aplicar(req.user, csv, { permitirParcial: req.query.parcial === '1' }, ctx(req)));
+  });
+  api.get('/cartera/auditoria', requiere('admin'), async (req, res) => res.json({ eventos: await auditoria.listar({ limite: req.query.limite, entidad_id: req.query.entidad_id, actor: req.query.actor, accion: req.query.accion }) }));
+  api.get('/cartera/auditoria/verificar', requiere('admin'), async (_req, res) => res.json(await auditoria.verificar()));
 
   app.use('/api', api);
   app.use('/api', (_req, res) => res.status(404).json({ error: 'No encontrado.' }));

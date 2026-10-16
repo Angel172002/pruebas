@@ -16,13 +16,13 @@ export async function sembrarAdmin(db, cfg) {
     // posteriores no vuelven a pisar la clave del admin. Para repetirla hay que usar un OWNER_TOKEN distinto.
     const marca = `admin_recovery:${createHash('sha256').update(cfg.ownerToken).digest('hex').slice(0, 16)}`;
     const nueva = await db.run('INSERT INTO schema_migrations(name, applied_at) VALUES (?,?) ON CONFLICT DO NOTHING', [marca, ahora()]);
-    if (nueva.changes) await db.run("UPDATE users SET pass_hash=?, must_change=TRUE, activo=TRUE, rol='admin', area=NULL, session_version=session_version+1 WHERE id=?", [hash, existente.id]);
+    if (nueva.changes) await db.run("UPDATE users SET pass_hash=?, must_change=TRUE, activo=TRUE, rol='admin', area=NULL, acceso_cartera='total', mfa_enabled=FALSE, mfa_secret=NULL, mfa_recuperacion='[]', session_version=session_version+1 WHERE id=?", [hash, existente.id]);
     return;
   }
   const hayAdmin = await db.get("SELECT 1 AS x FROM users WHERE rol='admin' AND activo=TRUE LIMIT 1");
   if (hayAdmin || existente) return;
   // Si dos instancias arrancan a la vez, la UNIQUE(email) + DO NOTHING hace que solo una cree al admin.
-  await db.run(`INSERT INTO users(id,email,nombre,rol,area,pass_hash,must_change,activo,session_version,created_at) VALUES (?,?,?,?,?,?,TRUE,TRUE,1,?)
+  await db.run(`INSERT INTO users(id,email,nombre,rol,area,acceso_cartera,pass_hash,must_change,activo,session_version,created_at) VALUES (?,?,?,?,?,'total',?,TRUE,TRUE,1,?)
     ON CONFLICT DO NOTHING`, [randomUUID(), cfg.adminEmail, 'Administrador', 'admin', null, hash, ahora()]);
 }
 
@@ -47,6 +47,10 @@ function validar(b, { parcial = false } = {}) {
       v.area = b.area;
     }
   }
+  if (b.acceso_cartera !== undefined) {
+    if (!['ninguno', 'propia', 'total'].includes(b.acceso_cartera)) throw new UsuarioError('Acceso a cartera inválido.');
+    v.acceso_cartera = b.acceso_cartera;
+  }
   if (b.activo !== undefined) {
     if (typeof b.activo !== 'boolean') throw new UsuarioError('El estado debe ser verdadero o falso.');
     v.activo = b.activo;
@@ -56,14 +60,14 @@ function validar(b, { parcial = false } = {}) {
 
 export function crearUsuarios(db) {
   return {
-    listar: () => db.all('SELECT id,email,nombre,rol,area,must_change,activo,created_at,last_login FROM users ORDER BY activo DESC, rol, nombre'),
+    listar: () => db.all('SELECT id,email,nombre,rol,area,acceso_cartera,mfa_enabled,must_change,activo,created_at,last_login FROM users ORDER BY activo DESC, rol, nombre'),
     async crear(actor, b) {
       const v = validar(b);
       if (await db.get('SELECT 1 AS x FROM users WHERE email = ?', [v.email])) throw new UsuarioError('Ese correo ya está registrado.', 409);
       const temporal = claveTemporal();
       const id = randomUUID();
-      const r = await db.run('INSERT INTO users(id,email,nombre,rol,area,pass_hash,must_change,activo,session_version,created_at) VALUES (?,?,?,?,?,?,TRUE,TRUE,1,?) ON CONFLICT DO NOTHING',
-        [id, v.email, v.nombre, v.rol, v.area, await hashClave(temporal), ahora()]);
+      const r = await db.run('INSERT INTO users(id,email,nombre,rol,area,acceso_cartera,pass_hash,must_change,activo,session_version,created_at) VALUES (?,?,?,?,?,?,?,TRUE,TRUE,1,?) ON CONFLICT DO NOTHING',
+        [id, v.email, v.nombre, v.rol, v.area, v.rol === 'admin' ? 'total' : (v.acceso_cartera || 'ninguno'), await hashClave(temporal), ahora()]);
       if (!r.changes) throw new UsuarioError('Ese correo ya está registrado.', 409);
       return { usuario: publico(await db.get('SELECT * FROM users WHERE id = ?', [id])), temporal };
     },
@@ -73,9 +77,9 @@ export function crearUsuarios(db) {
       const v = validar({ ...b, rol: b.rol ?? u.rol, area: b.area ?? u.area }, { parcial: true });
       const nuevo = { ...u, ...v };
       if (id === actor.id && (nuevo.rol !== 'admin' || !nuevo.activo)) throw new UsuarioError('No puedes quitarte el rol de administrador ni desactivarte.');
-      const cambioAcceso = nuevo.rol !== u.rol || nuevo.area !== u.area || nuevo.activo !== u.activo;
-      const aplicar = x => x.run('UPDATE users SET nombre=?, rol=?, area=?, activo=?, session_version=session_version+? WHERE id=?',
-        [nuevo.nombre, nuevo.rol, nuevo.area, nuevo.activo, cambioAcceso ? 1 : 0, id]);
+      const cambioAcceso = nuevo.rol !== u.rol || nuevo.area !== u.area || nuevo.activo !== u.activo || nuevo.acceso_cartera !== u.acceso_cartera;
+      const aplicar = x => x.run('UPDATE users SET nombre=?, rol=?, area=?, acceso_cartera=?, activo=?, session_version=session_version+? WHERE id=?',
+        [nuevo.nombre, nuevo.rol, nuevo.area, nuevo.rol === 'admin' ? 'total' : nuevo.acceso_cartera, nuevo.activo, cambioAcceso ? 1 : 0, id]);
       if (u.rol === 'admin' && u.activo && (nuevo.rol !== 'admin' || !nuevo.activo)) {
         // Quitar un admin: el lock evita que dos admins se degraden a la vez y dejen el sistema sin ninguno.
         await db.tx(async x => {

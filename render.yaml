@@ -15,6 +15,10 @@ services:
         sync: false
       - key: SESSION_SECRET
         generateValue: true
+      - key: DATA_KEY
+        sync: false # openssl rand -hex 32 — guárdala en tu gestor de secretos
+      - key: MFA_REQUIRED
+        value: admin
       - key: GITHUB_TOKEN
         sync: false
       - key: GITHUB_REPOS

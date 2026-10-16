@@ -33,6 +33,13 @@ export function loadConfig(env = process.env) {
   if (prod && (env.SESSION_SECRET || '').length < 16) {
     throw new Error('SESSION_SECRET es obligatorio en producción (mínimo 16 caracteres).');
   }
+  // Clave de cifrado de datos personales de la cartera (32 bytes). Perderla = perder esos datos: guárdala en un gestor de secretos.
+  const dataKey = env.DATA_KEY || '';
+  if (prod && !/^([0-9a-f]{64}|[A-Za-z0-9+/_-]{43}=?)$/i.test(dataKey.trim())) {
+    throw new Error('DATA_KEY es obligatorio en producción (32 bytes: openssl rand -hex 32).');
+  }
+  const mfa = env.MFA_REQUIRED || (prod ? 'admin' : 'off');
+  if (!['off', 'admin', 'all'].includes(mfa)) throw new Error('MFA_REQUIRED debe ser off, admin o all.');
   const dbUrl = env.DATABASE_URL || `pglite:${env.DB_PATH || './data/pglite'}`;
   if (prod && !/^postgres(ql)?:\/\//.test(dbUrl)) {
     throw new Error('DATABASE_URL (postgres://…, p. ej. Neon) es obligatorio en producción.');
@@ -44,6 +51,9 @@ export function loadConfig(env = process.env) {
     ownerToken,
     devOpen: !prod && env.DEV_OPEN === '1', // modo abierto (admin sintético) solo si se pide de forma explícita
     adminEmail,
+    dataKey: dataKey || (prod ? '' : randomBytes(32).toString('hex')), // en desarrollo sin clave fija, los datos no sobreviven a un reinicio
+    dataKeyPrev: env.DATA_KEY_PREV || '',
+    mfaRequired: mfa,
     adminRecovery: env.ADMIN_RECOVERY === 'true',
     sessionSecret: env.SESSION_SECRET || randomBytes(32).toString('hex'),
     githubToken: env.GITHUB_TOKEN || '',

@@ -11,7 +11,7 @@ import { crearGitHub } from '../src/services/github.js';
 import { diasHasta, escalamiento, sumarMes } from '../src/domain.js';
 
 const COM = 'Dirección Comercial', JUR = 'Dirección Jurídica';
-const INICIAL = 'admin-inicial-123', ADMIN_PASS = 'Admin-clave-nueva-1', USER_PASS = 'Usuario-clave-1';
+const INICIAL = 'admin-inicial-123', ADMIN_PASS = 'Clave-segura-nueva-1', USER_PASS = 'Usuario-clave-1';
 let server, base, db, ghCalls, dir;
 const cookies = {}; // admin, com, jur, lec
 const fakeFetch = async (url, init = {}) => {
@@ -44,7 +44,7 @@ before(async () => {
   const cfg = loadConfig({ OWNER_TOKEN: INICIAL, ADMIN_EMAIL: 'Admin@Liva.co', SESSION_SECRET: 'test-session-secret-123', GITHUB_TOKEN: 'ghp_x', GITHUB_REPOS: 'o/r' });
   dir = mkdtempSync(join(tmpdir(), 'liva-'));
   db = await openDb({ url: process.env.TEST_DATABASE_URL || `pglite:${join(dir, 'pg')}` });
-  if (process.env.TEST_DATABASE_URL) await db.run('TRUNCATE tasks, series, task_events, github_links, users, login_attempts RESTART IDENTITY CASCADE');
+  if (process.env.TEST_DATABASE_URL) await db.run('TRUNCATE tasks, series, task_events, github_links, users, login_attempts, clientes, pagos_cliente, audit_log RESTART IDENTITY CASCADE');
   await sembrarAdmin(db, cfg);
   server = crearApp({ cfg, db, fetchImpl: fakeFetch }).listen(0);
   base = `http://127.0.0.1:${server.address().port}`;
@@ -256,7 +256,7 @@ test('eliminar deja rastro en la auditoría', async () => {
 });
 
 test('configuración de producción y recuperación del admin', async () => {
-  const base = { NODE_ENV: 'production', OWNER_TOKEN: 'x'.repeat(12), SESSION_SECRET: 'y'.repeat(16), ADMIN_EMAIL: 'a@b.co', DATABASE_URL: 'postgresql://u:p@host/db' };
+  const base = { NODE_ENV: 'production', OWNER_TOKEN: 'x'.repeat(12), SESSION_SECRET: 'y'.repeat(16), ADMIN_EMAIL: 'a@b.co', DATABASE_URL: 'postgresql://u:p@host/db', DATA_KEY: 'a'.repeat(64) };
   assert.equal(loadConfig(base).prod, true);
   for (const [falta, re] of [['OWNER_TOKEN', /OWNER_TOKEN/], ['SESSION_SECRET', /SESSION_SECRET/], ['ADMIN_EMAIL', /ADMIN_EMAIL/], ['DATABASE_URL', /DATABASE_URL/]]) {
     assert.throws(() => loadConfig({ ...base, [falta]: '' }), re);
@@ -299,7 +299,7 @@ test('recuperación del admin: un solo uso por valor de OWNER_TOKEN', async () =
 test('modo abierto solo con DEV_OPEN=1 y nunca en producción', () => {
   assert.equal(loadConfig({}).devOpen, false);
   assert.equal(loadConfig({ DEV_OPEN: '1' }).devOpen, true);
-  assert.equal(loadConfig({ DEV_OPEN: '1', NODE_ENV: 'production', OWNER_TOKEN: 'x'.repeat(12), SESSION_SECRET: 'y'.repeat(16), ADMIN_EMAIL: 'a@b.co', DATABASE_URL: 'postgres://u:p@h/d' }).devOpen, false);
+  assert.equal(loadConfig({ DEV_OPEN: '1', NODE_ENV: 'production', OWNER_TOKEN: 'x'.repeat(12), SESSION_SECRET: 'y'.repeat(16), ADMIN_EMAIL: 'a@b.co', DATABASE_URL: 'postgres://u:p@h/d', DATA_KEY: 'a'.repeat(64) }).devOpen, false);
 });
 
 test('entradas malformadas dan 4xx, no 500', async () => {

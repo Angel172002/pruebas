@@ -4,3 +4,16 @@ data/
 *.db
 *.db-*
 backups/
+
+# Datos reales de clientes y secretos: NUNCA al repositorio
+*.csv
+*.xlsx
+*.xls
+*.ods
+*.dump
+*.bak
+*.pem
+*.key
+importaciones/
+.env.*
+!.env.example
