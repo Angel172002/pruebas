@@ -115,7 +115,23 @@
           <button class="btn primary" data-act="new" data-tipo="pago" data-escribe type="button">Nuevo pago</button></div></div>
         <div class="board" id="boardPag"></div>
       </section>
-      <section id="pan-confirmar" role="tabpanel" aria-labelledby="tab-confirmar" tabindex="0" hidden><div id="inbox"></div></section>
+      <section id="pan-confirmar" role="tabpanel" aria-labelledby="tab-confirmar" tabindex="0" hidden>
+        <details class="extract" id="extractBox">
+          <summary><b>Procesar las notas de una reunión</b><span>Pega las notas (p. ej. las de Gemini) y la IA propone las tareas y pagos</span></summary>
+          <form id="extractForm" novalidate>
+            <div class="row">
+              <div class="field"><label for="xTitulo">Nombre de la reunión</label><input id="xTitulo" maxlength="70" placeholder="Ej.: Comité directivo" autocomplete="off" required></div>
+              <div class="field"><label for="xFecha">Fecha de la reunión</label><input id="xFecha" type="date" required></div>
+            </div>
+            <div class="field"><label for="xTexto">Notas de la reunión</label><textarea id="xTexto" rows="9" placeholder="Pega aquí el texto de las notas…" required></textarea>
+              <p class="hint" id="xConteo">0 caracteres</p></div>
+            <p class="err" id="xErr" role="alert"></p>
+            <div class="bar-btns"><button class="btn primary" id="xEnviar" type="submit">Extraer tareas</button><span class="hint" id="xEstado" role="status"></span></div>
+            <div id="xResultado"></div>
+          </form>
+        </details>
+        <div id="inbox"></div>
+      </section>
       <section id="pan-usuarios" role="tabpanel" aria-labelledby="tab-usuarios" tabindex="0" hidden>
         <div class="bar"><p class="hint">Cada persona entra con su correo y ve solo el panel de su dirección. Los administradores ven todo.</p>
           <button class="btn primary" id="bNuevoUsuario" type="button">Nuevo usuario</button></div>

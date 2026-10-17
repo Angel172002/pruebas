@@ -5,7 +5,7 @@ export function hoyISO(now = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
 }
 
-const esFechaISO = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + 'T00:00:00Z'))
+export const esFechaISO = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + 'T00:00:00Z'))
   && new Date(s + 'T00:00:00Z').toISOString().slice(0, 10) === s;
 
 /** Diferencia en días calendario (fecha - hoy), sin depender de husos ni DST. */
@@ -77,6 +77,8 @@ export function validarTarea(b, { tipo, parcial = false } = {}) {
 /** Reglas de negocio sobre la tarea completa (ya combinada con lo guardado). */
 export function reglasNegocio(t, { confirmando = false } = {}) {
   if (t.tipo === 'pago' && !t.fecha_limite && (confirmando || t.estado !== 'propuesta')) return 'Asigna la fecha de pago para que el tablero te avise.';
+  // Una propuesta es un borrador: las reglas de dirección/categoría se exigen al confirmarla, no al proponerla.
+  if (t.estado === 'propuesta' && !confirmando) return '';
   if (t.categoria === 'prioritario' && t.area === GENERAL) return 'Lo Prioritario se gestiona con el equipo: elige una dirección o Todos.';
   if (t.categoria === 'importante' && t.area === GENERAL) return 'Lo Importante se delega: elige otra dirección o Todos.';
   return '';

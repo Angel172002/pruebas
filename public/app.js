@@ -120,6 +120,8 @@ function render() {
   $('#mNombre').textContent = S.user.nombre; $('#mCorreo').textContent = S.user.email;
   $('#avatar').textContent = S.user.nombre.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
   $('#toolbar').hidden = !['actividades', 'pagos'].includes(S.ui.tab);
+  const ia = S.cfg?.extraccion?.disponible; $('#xEnviar').disabled = ia === false;
+  if (ia === false && !$('#xEstado').textContent) $('#xEstado').textContent = 'Falta configurar ANTHROPIC_API_KEY en Vercel para usar esta función.';
   document.querySelectorAll('#fEstado button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === S.ui.estado)));
   for (const id of ['pagos', 'confirmar', 'usuarios', 'datos']) $('#tab-' + id).hidden = !owner;
   if (!owner && S.ui.tab !== 'actividades') S.ui.tab = 'actividades';
@@ -302,7 +304,10 @@ document.addEventListener('click', async ev => {
       const r = await api.post('/meetings/confirm', { origen: b.dataset.origen === 'Sin origen' ? '' : b.dataset.origen });
       await cargar(); toast(r.requierenRevision.length ? `Confirmé ${r.confirmadas}. ${r.requierenRevision.length} necesitan revisión antes de entrar.` : `Confirmé ${r.confirmadas}.`);
     }
-  } catch (e) { fallo(e); if (e.status === 409) cargar(); } finally { b.disabled = false; }
+  } catch (e) {
+    if (act === 'confirmar' && e.status === 422) { toast(e.message); abrir(null, id); }
+    else { fallo(e); if (e.status === 409) cargar(); }
+  } finally { b.disabled = false; }
 });
 
 /* ---------- diálogo ---------- */
@@ -547,6 +552,28 @@ function formUsuario(u) {
   h('div', { class: 'dlg-f' }, h('div', {}), h('div', {}, h('button', { class: 'btn', type: 'button', text: 'Cancelar', onclick: () => gen.close() }), enviar))));
 }
 $('#bNuevoUsuario').addEventListener('click', () => formUsuario(null));
+
+/* ---------- Procesar notas de una reunión ---------- */
+$('#xFecha').value = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+$('#xTexto').addEventListener('input', e => { $('#xConteo').textContent = `${e.target.value.length.toLocaleString('es-CO')} caracteres`; });
+async function enviarNotas(forzar) {
+  const btn = $('#xEnviar'); $('#xErr').textContent = ''; $('#xResultado').replaceChildren();
+  const cuerpo = { titulo: $('#xTitulo').value.trim(), fecha: $('#xFecha').value, texto: $('#xTexto').value, forzar };
+  if (!cuerpo.titulo) { $('#xErr').textContent = 'Escribe el nombre de la reunión.'; return $('#xTitulo').focus(); }
+  btn.disabled = true; $('#xEstado').textContent = 'Analizando las notas… puede tardar hasta un minuto.';
+  try {
+    const r = await api.post('/meetings/extract', cuerpo);
+    S.abiertas.add(r.origen); $('#xTexto').value = ''; $('#xConteo').textContent = '0 caracteres'; $('#xEstado').textContent = '';
+    toast(r.creadas ? `Se propusieron ${plural(r.creadas, 'tarea o pago', 'tareas y pagos')}. Revísalos abajo.` : 'No se encontraron compromisos en estas notas.');
+    if (r.descartadas.length) $('#xResultado').replaceChildren(h('p', { class: 'hint', text: `No se pudieron usar ${r.descartadas.length}:` }), h('ul', { class: 'res-lista' }, r.descartadas.map(d => h('li', { text: `${d.titulo}: ${d.motivo}` }))));
+    await cargar();
+  } catch (e) {
+    $('#xEstado').textContent = '';
+    if (e.status === 409 && confirm('Estas notas ya se procesaron antes. ¿Quieres procesarlas de nuevo? Se crearán propuestas duplicadas si no descartaste las anteriores.')) return await enviarNotas(true);
+    if (e.status !== 409) $('#xErr').textContent = e.message;
+  } finally { btn.disabled = S.cfg?.extraccion?.disponible === false; }
+}
+$('#extractForm').addEventListener('submit', e => { e.preventDefault(); if (!$('#xEnviar').disabled) enviarNotas(false); });
 
 // Sincronización: al volver a la pestaña y cada 30 s; también refresca el "hoy" tras medianoche.
 document.addEventListener('visibilitychange', () => { if (!document.hidden && S.user && !S.user.must_change && !dlg.open && !gen.open) cargar(); });
