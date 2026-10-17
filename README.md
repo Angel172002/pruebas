@@ -46,6 +46,21 @@ Cada persona entra con **su propio correo y clave**. El administrador crea y ges
 En **Datos y GitHub → Importar JSON** sube un archivo `{"tareas":[…],"pagos":[…]}` (la colección de `window.claude.db`).
 Se muestra una vista previa con lo rechazado (p. ej. montos ambiguos como `1.500,50`) y repetirlo no duplica.
 
+## Reuniones: de las notas a "Por confirmar"
+
+En **Por confirmar → Procesar las notas de una reunión** (solo administrador) pegas las notas de la reunión (p. ej. las que genera
+Gemini en Meet) con su nombre y fecha. La IA (API de Claude) extrae los compromisos y los deja como **propuestas** agrupadas por reunión;
+tu equipo no ve nada hasta que las confirmes.
+
+- Extrae **solo compromisos explícitos**; asigna dirección, categoría (según los plazos Urgente/Prioritario/Importante), responsable,
+  fecha (convierte "el viernes" usando la fecha de la reunión) y, si hay, el valor de pagos en COP. Lo que el servidor no puede validar
+  se descarta y se te informa; lo que no cumple las reglas de dirección/categoría queda como borrador y se abre para **revisar** al confirmar.
+- Las mismas notas no se procesan dos veces (se avisa y puedes forzarlo). Las notas se tratan como **datos**: cualquier instrucción dentro de ellas se ignora.
+- Variables: `ANTHROPIC_API_KEY` (obligatoria para activar la función), `EXTRACT_MODEL` (por defecto `claude-opus-5-5`) y
+  `EXTRACT_EFFORT` (`low` por defecto; `medium`/`high` si necesitas más precisión a costa de tiempo y costo).
+- **Privacidad**: el texto de las notas se envía a la API de Anthropic. Confirma que tu empresa lo autoriza antes de usarlo con información sensible.
+- Límites: notas de hasta 60.000 caracteres; una reunión por solicitud (hasta ~1 minuto).
+
 ## GitHub
 
 Configura en el servidor `GITHUB_TOKEN` (fine-grained PAT, solo los repos necesarios: Issues read/write, Pull requests read)
@@ -69,6 +84,7 @@ Vercel es serverless (disco efímero), por eso en producción la base es **Neon*
    | `ADMIN_EMAIL` | correo del administrador |
    | `OWNER_TOKEN` | clave **inicial** del admin (≥ 12); se te pedirá cambiarla al entrar |
    | `SESSION_SECRET` | aleatorio (≥ 16): `openssl rand -hex 32` |
+   | `ANTHROPIC_API_KEY` | opcional: activa la extracción de tareas desde notas de reuniones |
    | `GITHUB_TOKEN`, `GITHUB_REPOS` | opcionales (ver GitHub) |
 4. Despliega. Comprueba `https://<tu-app>.vercel.app/readyz`. Las migraciones se aplican solas en el primer arranque.
 

@@ -46,6 +46,9 @@ export function loadConfig(env = process.env) {
     adminEmail,
     adminRecovery: env.ADMIN_RECOVERY === 'true',
     sessionSecret: env.SESSION_SECRET || randomBytes(32).toString('hex'),
+    anthropicKey: env.ANTHROPIC_API_KEY || '',
+    extractModel: env.EXTRACT_MODEL || 'claude-opus-5-5',
+    extractEffort: ['low', 'medium', 'high'].includes(env.EXTRACT_EFFORT) ? env.EXTRACT_EFFORT : 'low',
     githubToken: env.GITHUB_TOKEN || '',
     githubRepos: (env.GITHUB_REPOS || '').split(',').map(s => s.trim()).filter(Boolean)
   };

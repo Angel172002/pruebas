@@ -1,23 +1,25 @@
 import express from 'express';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AREAS, CATEGORIAS } from './config.js';
 import { anticsrf, authMiddleware, cookieOpts, crearSesion, hashFalso, requiere, validarClaveNueva, verificarClave } from './auth.js';
-import { validarTarea } from './domain.js';
+import { esFechaISO, validarTarea } from './domain.js';
 import { crearStore } from './store.js';
 import { crearUsuarios, esCorreo } from './users.js';
 import { aCsv, exportar, importar, normalizarImport } from './portability.js';
 import { GitHubError, crearGitHub } from './services/github.js';
+import { ExtraccionError, crearExtractor } from './services/extractor.js';
 
 const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const VENTANA_MS = 15 * 60000, MAX_POR_PAR = 8, MAX_POR_CORREO = 30, MAX_POR_IP = 40;
 const SIN_SESION = 'sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0';
 
-export function crearApp({ cfg, db, fetchImpl }) {
+export function crearApp({ cfg, db, fetchImpl, extractor: extractorInyectado }) {
   const app = express();
   const store = crearStore(db);
   const usuarios = crearUsuarios(db);
+  const extractor = extractorInyectado ?? crearExtractor({ apiKey: cfg.anthropicKey, model: cfg.extractModel, effort: cfg.extractEffort });
   const gh = crearGitHub({ token: cfg.githubToken, repos: cfg.githubRepos, fetchImpl });
   app.disable('x-powered-by');
   if (cfg.prod) app.set('trust proxy', 1);
@@ -41,6 +43,7 @@ export function crearApp({ cfg, db, fetchImpl }) {
   const areasDe = u => (u.rol === 'admin' ? AREAS : [u.area]);
   app.get('/api/session', (req, res) => res.json({
     user: req.user, areas: req.user ? areasDe(req.user) : [], categorias: CATEGORIAS,
+    extraccion: req.user?.rol === 'admin' ? { disponible: extractor.disponible } : undefined,
     github: { configurado: gh.configurado(), repos: req.user?.rol === 'admin' || req.user?.rol === 'miembro' ? gh.repos() : [] }
   }));
 
@@ -132,6 +135,37 @@ export function crearApp({ cfg, db, fetchImpl }) {
   });
   api.delete('/tasks/:id', requiere('admin'), async (req, res) => { await store.eliminar(req.actor, req.params.id); res.status(204).end(); });
   api.post('/meetings/confirm', requiere('admin'), async (req, res) => res.json(await store.confirmarReunion(req.actor, String(req.body?.origen ?? ''))));
+
+  // ---- Reuniones: de las notas (p. ej. Gemini) a propuestas en "Por confirmar"
+  const MAX_NOTAS = 60000;
+  api.post('/meetings/extract', requiere('admin'), async (req, res) => {
+    if (!extractor.disponible) return res.status(503).json({ error: 'La extracción con IA no está configurada (falta ANTHROPIC_API_KEY en el servidor).', code: 'sin_ia' });
+    const titulo = String(req.body?.titulo ?? '').trim(), fecha = req.body?.fecha, texto = String(req.body?.texto ?? '').trim();
+    if (!titulo || titulo.length > 70) return res.status(422).json({ error: 'Escribe el nombre de la reunión (máximo 70 caracteres).' });
+    if (!esFechaISO(fecha)) return res.status(422).json({ error: 'Indica la fecha de la reunión.' });
+    if (texto.length < 40) return res.status(422).json({ error: 'Pega las notas completas de la reunión (son muy cortas).' });
+    if (texto.length > MAX_NOTAS) return res.status(413).json({ error: `Las notas superan ${MAX_NOTAS.toLocaleString('es-CO')} caracteres. Divídelas en partes.` });
+    const hash = createHash('sha256').update(texto).digest('hex');
+    if (!req.body?.forzar && await db.get('SELECT 1 AS x FROM meeting_sources WHERE hash = ?', [hash])) {
+      return res.status(409).json({ error: 'Estas notas ya se procesaron antes.', code: 'duplicada' });
+    }
+    const tareas = await extractor.extraer({ titulo, fecha, texto });
+    const origen = `${titulo} · ${fecha}`;
+    const descartadas = []; let creadas = 0;
+    for (const t of tareas) {
+      const tipo = t.tipo === 'pago' ? 'pago' : 'actividad';
+      const cuerpo = { tipo, titulo: String(t.titulo ?? '').trim().slice(0, 160), categoria: t.categoria, area: t.area, responsable: String(t.responsable ?? '').slice(0, 80),
+        fecha_limite: t.fecha_limite && esFechaISO(t.fecha_limite) ? t.fecha_limite : null, origen, notas: String(t.notas ?? '').slice(0, 1000),
+        ...(tipo === 'pago' ? { monto: Number.isInteger(t.monto) && t.monto >= 0 ? t.monto : null } : {}) };
+      const { error, valor } = validarTarea(cuerpo, { tipo });
+      if (error) { descartadas.push({ titulo: cuerpo.titulo || '(sin título)', motivo: error }); continue; }
+      await store.crear(req.actor, valor, { tipo, estado: 'propuesta' }); creadas++;
+    }
+    await db.run(`INSERT INTO meeting_sources(hash, origen, creadas, created_by, created_at) VALUES (?,?,?,?,?)
+      ON CONFLICT(hash) DO UPDATE SET origen = excluded.origen, creadas = excluded.creadas, created_by = excluded.created_by, created_at = excluded.created_at`,
+      [hash, origen, creadas, req.actor, new Date().toISOString()]);
+    res.status(201).json({ origen, creadas, descartadas });
+  });
 
   // ---- Usuarios (solo administrador)
   api.get('/users', requiere('admin'), async (_req, res) => res.json({ users: await usuarios.listar() }));
@@ -226,7 +260,7 @@ export function crearApp({ cfg, db, fetchImpl }) {
     if (!err.status && err.code === '23514') err.message = 'Los datos no cumplen las reglas de validación.';
     const id = randomUUID().slice(0, 8);
     if (status >= 500) console.error(JSON.stringify({ level: 'error', id, path: req.path, msg: err.message }));
-    res.status(status).json({ error: status >= 500 && !(err instanceof GitHubError) ? `Error interno (ref ${id}).` : err.message });
+    res.status(status).json({ error: status >= 500 && !(err instanceof GitHubError) && !(err instanceof ExtraccionError) ? `Error interno (ref ${id}).` : err.message });
   });
   return app;
 }
