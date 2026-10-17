@@ -119,6 +119,7 @@ function render() {
   const foco = document.activeElement?.dataset?.id && { id: document.activeElement.dataset.id, act: document.activeElement.dataset.act };
   $('#hoy').textContent = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Bogota' }).replace(/^./, c => c.toUpperCase());
   const owner = S.rol === 'admin';
+  $('#fab').hidden = S.rol === 'lector' || S.ui.tab === 'cartera'; // en Cartera el botón flotante de actividades no aplica
   const rolTxt = owner ? (S.user.nombre === ROLES.admin ? 'Acceso total' : ROLES.admin) : S.user.area.replace(/^Dirección /, '');
   $('#hNombre').textContent = S.user.nombre; $('#hRol').textContent = rolTxt;
   $('#mNombre').textContent = S.user.nombre; $('#mCorreo').textContent = S.user.email;
@@ -484,7 +485,7 @@ $('#bResumen').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(texto); toast('Resumen copiado.'); } catch { toast('No se pudo copiar automáticamente.'); }
 });
 document.addEventListener('keydown', e => {
-  if (e.key !== 'n' || dlg.open || e.metaKey || e.ctrlKey || e.altKey || !esEscritor()) return;
+  if (e.key !== 'n' || dlg.open || e.metaKey || e.ctrlKey || e.altKey || !esEscritor() || S.ui.tab === 'cartera') return;
   if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return;
   e.preventDefault(); abrir(S.ui.tab === 'pagos' && S.rol === 'admin' ? 'pago' : 'actividad', null, 'urgente');
 });

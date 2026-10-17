@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { enmascarar } from './crypto.js';
 import { derivar, totales, validarCliente, validarPago, vencimientos, ValidacionError } from './cartera-domain.js';
-import { hoyISO } from './domain.js';
+import { diasHasta, hoyISO } from './domain.js';
 import { RANGO } from './auth.js';
 
 export class CarteraError extends Error { constructor(m, status = 422) { super(m); this.status = status; } }
@@ -193,7 +193,27 @@ export function crearCartera({ db, cifrador, auditoria }) {
       vencimientos(c.inicio_pagos, c.n_cuotas).forEach(v => { if (Number(v.slice(0, 4)) === anio && v <= hoy) mes[Number(v.slice(5, 7)) - 1].esperado += c.cuota_mensual; });
     }
     const por = k => lista.filter(c => c.alerta === k).length;
-    return { hoy, anio, totales: totales(lista), alertas: { al_dia: por('al_dia'), mora: por('mora'), mora_grave: por('mora_grave'), sin_pago: por('sin_pago'), finalizado: por('finalizado') },
+    const vivos = lista.filter(c => c.estado === 'activo' && c.alerta !== 'finalizado');
+    // Proyección de caja: cuotas que vencen en los próximos 6 meses y que aún no están cubiertas por pagos adelantados.
+    const [y0, m0] = hoy.split('-').map(Number);
+    const proyeccion = Array.from({ length: 6 }, (_, i) => ({ mes: new Date(Date.UTC(y0, m0 - 1 + i, 1)).toISOString().slice(0, 7), esperado: 0, cuotas: 0 }));
+    for (const c of vivos) vencimientos(c.inicio_pagos, c.n_cuotas).forEach((v, k) => {
+      const p = v > hoy && k >= c.cuotas_pagadas && proyeccion.find(x => x.mes === v.slice(0, 7));
+      if (p) { p.esperado += c.cuota_mensual; p.cuotas++; }
+    });
+    // Cartera vencida por antigüedad (días de mora aproximados, como la matriz).
+    const rangos = [['1–30 días', 1, 30], ['31–60 días', 31, 60], ['61–90 días', 61, 90], ['Más de 90 días', 91, Infinity]];
+    const edades = rangos.map(([rango, d, h]) => { const x = vivos.filter(c => c.valor_en_mora > 0 && c.dias_mora >= d && c.dias_mora <= h); return { rango, clientes: x.length, valor: x.reduce((a, c) => a + c.valor_en_mora, 0) }; });
+    const suma = k => lista.reduce((a, c) => a + (c[k] || 0), 0);
+    const egresos = { honorarios: suma('honorarios'), bonificacion: suma('bonificacion'), gastos_admin: suma('gastos_admin'), gastos_adq: suma('gastos_adq'), pago_centro: suma('pago_centro') };
+    egresos.total = Object.values(egresos).reduce((a, b) => a + b, 0);
+    const corto = c => ({ id: c.id, nombre: c.nombre, asesor: c.asesor, valor: c.valor_en_mora, dias: c.dias_mora, cuotas: c.cuotas_en_mora, alerta: c.alerta });
+    const atencion = {
+      mayores_moras: [...vivos].filter(c => c.valor_en_mora > 0).sort((a, b) => b.valor_en_mora - a.valor_en_mora).slice(0, 5).map(corto),
+      vencen_semana: vivos.filter(c => c.proximo_vencimiento && diasHasta(c.proximo_vencimiento, hoy) <= 7 && c.cuotas_pagadas <= c.cuotas_esperadas)
+        .sort((a, b) => (a.proximo_vencimiento < b.proximo_vencimiento ? -1 : 1)).slice(0, 6).map(c => ({ id: c.id, nombre: c.nombre, asesor: c.asesor, fecha: c.proximo_vencimiento, valor: c.cuota_mensual }))
+    };
+    return { hoy, anio, proyeccion, edades, egresos, atencion, totales: totales(lista), alertas: { al_dia: por('al_dia'), mora: por('mora'), mora_grave: por('mora_grave'), sin_pago: por('sin_pago'), finalizado: por('finalizado') },
       por_asesor: ase.map(([id, nombre]) => ({ id, nombre, ...totales(lista.filter(c => c.asesor_id === id)) })), mensual: mes };
   }
 

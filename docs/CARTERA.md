@@ -8,16 +8,20 @@ Módulo de la app LIVA que reemplaza la hoja `Matriz_Financiera_LeyInsolvencia_2
 
 ## 1. Qué se ve en la app
 
-| Sección | Para qué sirve | Quién |
+La interfaz está pensada para leerse sin saber de contabilidad: palabras simples, una frase que dice cómo está la cartera, y un **?** junto a cada término. Arriba, siempre visible, hay un buscador **por cédula o nombre** y el botón **Registrar pago**. En el celular el menú pasa a la parte de abajo.
+
+| Pestaña | Qué responde | Quién |
 |---|---|---|
-| **Resumen** | Indicadores de la cartera, recaudo mensual (recibido vs. esperado), salud de la cartera, mayores moras | todos los que tienen acceso (cada uno ve lo suyo) |
-| **Clientes** | Buscar por **cédula** o nombre, filtrar por asesor/alerta, ordenar, abrir la ficha | todos |
-| **Ficha del cliente** | Cobros y saldos, calendario de cuotas, pagos del año, historial, proceso, costos, utilidad, avisos de calidad de datos, teléfono/WhatsApp | todos (según alcance) |
+| **Inicio** | «¿Cómo estamos?»: estado de la cartera en una frase, % recuperado, 4 cifras clave, recaudo por mes frente a lo esperado, cobros esperados a 6 meses, mora por antigüedad, quién requiere atención y a dónde va el dinero | todos (cada uno ve lo suyo) |
+| **Clientes** | Lista con avance del contrato, saldo y estado; filtros por estado y asesor; ficha de cada cliente | todos |
+| **Ficha** | Saldo por cobrar, próxima cuota o mora con botones de llamar/WhatsApp, plan de pagos, pagos, contrato, costos y utilidad | todos (según alcance) |
 | **Cobranza** | Mora por antigüedad (1–30, 31–60, 61–90, +90) | todos |
-| **Flujo anual** | Mapa de calor cliente × mes | todos |
-| **Asesores** | Rendimiento por asesor | admin / acceso total |
+| **Flujo de caja** | Lo recibido en el año y la proyección a 6 meses; detalle por cliente y mes | todos |
+| **Asesores** | Rendimiento de cada asesor | admin / acceso total |
 | **Importar** | Migrar la matriz desde CSV con simulación y conciliación | admin |
-| **Auditoría** | Quién vio/cambió qué, con verificación de integridad | admin |
+| **Auditoría** | Quién vio o cambió qué, con verificación de integridad | admin |
+
+**Ver el diseño sin desplegar nada:** `node scripts/vista-previa.mjs` genera `vista-previa.html`, una vista interactiva con datos de prueba ficticios y el motor real (no guarda nada). La tipografía (Manrope, licencia OFL) va incluida en `public/fonts/`, porque la política de seguridad de la app no permite fuentes externas.
 
 ## 2. Roles y alcance
 

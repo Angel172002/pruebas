@@ -17,3 +17,4 @@ backups/
 importaciones/
 .env.*
 !.env.example
+vista-previa.html

@@ -11,6 +11,7 @@ import { crearCifrador } from '../src/crypto.js';
 import { crearAuditoria } from '../src/audit.js';
 import { crearCartera } from '../src/cartera.js';
 import { derivar } from '../src/cartera-domain.js';
+import { hoyISO } from '../src/domain.js';
 import * as totp from '../src/totp.js';
 import { parseCsv } from '../src/cartera-import.js';
 
@@ -39,6 +40,7 @@ before(async () => {
   dir = mkdtempSync(join(tmpdir(), 'cartera-'));
   db = await openDb({ url: process.env.TEST_DATABASE_URL || `pglite:${join(dir, 'pg')}` });
   if (process.env.TEST_DATABASE_URL) await db.run('TRUNCATE tasks, series, task_events, github_links, users, login_attempts, clientes, pagos_cliente, audit_log RESTART IDENTITY CASCADE');
+  if (process.env.TEST_DATABASE_URL) await db.run("DELETE FROM schema_migrations WHERE name LIKE 'admin_recovery:%'"); // marcas de recuperación de corridas anteriores
   await sembrarAdmin(db, cfg);
   server = crearApp({ cfg, db }).listen(0);
   base = `http://127.0.0.1:${server.address().port}`;
@@ -457,4 +459,34 @@ test('resumen y flujo: totales consistentes con la lista y alertas por estado', 
   assert.equal(suma, res.totales.clientes);
   const fl = (await (await req('admin', 'GET', '/api/cartera/flujo')).json()).filas;
   assert.equal(fl.reduce((a, f) => a + f.total, 0), res.mensual.reduce((a, m) => a + m.recibido, 0));
+});
+
+test('resumen: proyección de caja a 6 meses, cartera por antigüedad, egresos y lista de atención', async () => {
+  const resumen = async () => (await (await req('admin', 'GET', '/api/cartera/resumen')).json());
+  const antes = await resumen();
+  assert.equal(antes.proyeccion.length, 6);
+  assert.equal(antes.proyeccion[0].mes, hoyISO().slice(0, 7), 'empieza en el mes actual');
+  assert.ok(antes.proyeccion.every((p, i, a) => i === 0 || p.mes > a[i - 1].mes));
+  // un cliente cuyo plan empieza dentro de 2 meses (día 15) y dura 4 cuotas aporta 1.000.000 a los meses +2..+5, y nada antes
+  const [y, m] = hoyISO().split('-').map(Number), ini = new Date(Date.UTC(y, m - 1 + 2, 15)).toISOString().slice(0, 10);
+  await crear('admin', { nombre: 'Proyección Futura', cedula: '91000001', asesor_id: ids.ana, inicio_pagos: ini, n_cuotas: 4, cuota_mensual: 1000000, total_contrato: 4000000 });
+  const despues = await resumen();
+  assert.deepEqual(despues.proyeccion.map((p, i) => p.esperado - antes.proyeccion[i].esperado), [0, 0, 1000000, 1000000, 1000000, 1000000]);
+  assert.deepEqual(despues.proyeccion.map((p, i) => p.cuotas - antes.proyeccion[i].cuotas), [0, 0, 1, 1, 1, 1]);
+  // antigüedad: cuatro rangos, nunca más que la mora total
+  assert.deepEqual(despues.edades.map(e => e.rango), ['1–30 días', '31–60 días', '61–90 días', 'Más de 90 días']);
+  assert.ok(despues.edades.reduce((a, e) => a + e.valor, 0) <= despues.totales.valor_en_mora);
+  // egresos: el total es la suma de sus partes y coincide con los clientes
+  const e = despues.egresos;
+  assert.equal(e.total, e.honorarios + e.bonificacion + e.gastos_admin + e.gastos_adq + e.pago_centro);
+  assert.ok(e.total > 0);
+  // atención: ordenadas de mayor a menor y limitadas
+  const mm = despues.atencion.mayores_moras;
+  assert.ok(mm.length <= 5 && mm.every((x, i) => i === 0 || mm[i - 1].valor >= x.valor));
+  assert.ok(despues.atencion.vencen_semana.length <= 6);
+  // un asesor solo ve la proyección de SUS clientes
+  const mia = await (await req('ana', 'GET', '/api/cartera/resumen')).json();
+  assert.ok(mia.proyeccion.reduce((a, p) => a + p.esperado, 0) <= despues.proyeccion.reduce((a, p) => a + p.esperado, 0));
+  const propios = new Set((await (await req('ana', 'GET', '/api/cartera/clientes')).json()).clientes.map(c => c.id));
+  assert.ok(mia.atencion.mayores_moras.every(x => propios.has(x.id)) && mia.atencion.vencen_semana.every(x => propios.has(x.id)), 'la lista de atención respeta el alcance');
 });

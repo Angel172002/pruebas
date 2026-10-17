@@ -45,6 +45,7 @@ before(async () => {
   dir = mkdtempSync(join(tmpdir(), 'liva-'));
   db = await openDb({ url: process.env.TEST_DATABASE_URL || `pglite:${join(dir, 'pg')}` });
   if (process.env.TEST_DATABASE_URL) await db.run('TRUNCATE tasks, series, task_events, github_links, users, login_attempts, clientes, pagos_cliente, audit_log RESTART IDENTITY CASCADE');
+  if (process.env.TEST_DATABASE_URL) await db.run("DELETE FROM schema_migrations WHERE name LIKE 'admin_recovery:%'"); // marcas de recuperación de corridas anteriores
   await sembrarAdmin(db, cfg);
   server = crearApp({ cfg, db, fetchImpl: fakeFetch }).listen(0);
   base = `http://127.0.0.1:${server.address().port}`;
