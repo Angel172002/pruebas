@@ -14,7 +14,7 @@
     "check": "node --check src/server.js && node --check api/index.js && node --check public/app.js"
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite": "^0.5.14",
     "express": "^5.1.0",
     "pg": "^8.23.1"
   }
